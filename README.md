@@ -1,0 +1,1 @@
+# ccmedical-inventory
