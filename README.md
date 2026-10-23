@@ -25,12 +25,27 @@ To import the existing inventory spreadsheet (sheet named "Location"):
 python app.py import "C:\path\to\inventory.xlsx"
 ```
 
-## Clients, tape colour and serial alerts
+## Clients and serial number alerts
 
-- **Clients** (sidebar): every account gets a permanent ID (`CL-00001`) with contacts, payment terms, account owner, an activity log (calls, emails, quotes, notes) and a full history of repairs and client-owned equipment. Customer repairs pick their customer from this list.
-- **Tape colour** on New Inventory: blue = ours, orange = not ours. Orange stock must name the client that owns it; customer repairs (RP) are always orange.
+- **Clients** (sidebar): every account gets a permanent ID (`CL-00001`) with contacts, payment terms, account owner, an activity log (calls, emails, quotes, notes) and a full history of their repairs. Customer repairs pick their customer from this list.
 - **Serial numbers are not unique keys.** Each item's inventory ID is its key. When a serial already exists anywhere (stock, cores or repairs), the form shows an alert while typing and after saving, but still lets you save, because different manufacturers can share serials.
 - **Demo data:** `python seed_demo.py` builds `demo_inventory.db` (fake data, no user accounts). Upload it at **/admin/restore**.
+
+## Staff roles
+
+Each account has one or more roles: **SuperAdmin**, **Admin**, **Sales**, **Shipping**, **Technician**. The full rules are in `PERMISSIONS` in `auth.py` and are checked on the server for every action.
+
+- **SuperAdmin**: everything, plus admin accounts, database restore and backups.
+- **Admin**: all inventory, clients, catalog and settings. Manages Sales, Shipping and Technician accounts.
+- **Sales**: clients, RMAs, inventory lookups, and purchase costs.
+- **Shipping**: receiving, shelf moves, RMAs, and moving repairs from Ready to Ship to Completed.
+- **Technician**: repair stages up to Ready to Ship, core labor/parts/QC, and shelf moves. No costs or clients.
+
+There is always at least one active SuperAdmin. Accounts from before roles existed: old admins become SuperAdmin, and other staff are view-only until given a role.
+
+### Creating accounts from a file (Render Secret File)
+
+Upload `users.env` as a Render **Secret File** (Environment > Secret Files). The app reads it from `/etc/secrets/users.env`, or from `CCM_USERS_FILE` if that's set. Each line looks like `CCM_USER_<LABEL>=username | Roles | password | Full name`. The same lines also work as ordinary environment variables. Accounts are only created, never changed, and lines whose password still says `CHANGE_ME` are skipped. Never commit this file. It is listed in `.gitignore`.
 
 ## Put it on the web with Render and Cloudflare
 

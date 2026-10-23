@@ -1,9 +1,11 @@
 """Staff accounts and login for CC Medical Inventory.
 
-Every page requires a signed-in user. Admins can manage users and use the
-product database admin tools. Passwords are stored as salted hashes, never
+Every page requires a signed-in user. Each user has one or more roles
+(SuperAdmin, Admin, Sales, Shipping, Technician); PERMISSIONS below decides what
+each role may do, and every protected route is checked on the server. Passwords are stored as salted hashes, never
 in plain text.
 """
+import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -47,8 +49,110 @@ def _iso(dt):
     return dt.isoformat(timespec="seconds")
 
 
+# --- Roles and permissions -------------------------------------------------
+
+ROLES = ["SuperAdmin", "Admin", "Sales", "Shipping", "Technician"]
+ADMIN_ROLES = {"SuperAdmin", "Admin"}
+ROLE_HELP = {
+    "SuperAdmin": "Everything, including admin accounts, database restore and backups",
+    "Admin": "All inventory, clients, catalog and settings; manages Sales/Shipping/Technician staff",
+    "Sales": "Clients, RMAs and inventory lookups; sees purchase costs",
+    "Shipping": "Receiving, shelf moves, RMAs, and Ready to Ship to Completed",
+    "Technician": "Repair stages up to Ready to Ship, core labor/parts/QC, shelf moves",
+}
+_SA, _A, _S, _SH, _T = ROLES
+PERMISSIONS = {
+    "view_cost":      {_SA, _A, _S},          # purchase / repair costs and totals
+    "receive":        {_SA, _A, _SH},         # New Inventory
+    "move":           {_SA, _A, _SH, _T},     # shelf transfers
+    "unit_repair":    {_SA, _A, _T},          # internal repair record on a stock item
+    "client_view":    {_SA, _A, _S, _SH},
+    "client_edit":    {_SA, _A, _S},
+    "rma_create":     {_SA, _A, _S, _SH},
+    "rma_edit":       {_SA, _A, _S, _SH, _T}, # stage moves are limited further by repair_stage_options()
+    "core_work":      {_SA, _A, _T},          # labor/parts, stage, QC
+    "core_convert":   {_SA, _A},
+    "catalog_admin":  {_SA, _A},
+    "users_manage":   {_SA, _A},              # Admins manage non-admin staff only
+    "admins_manage":  {_SA},
+    "backup":         {_SA},
+    "restore":        {_SA},
+}
+
+
+def roles_of(u):
+    if not u:
+        return set()
+    raw = u["roles"] if "roles" in u.keys() else None
+    return {r for r in (raw or "").split(",") if r in ROLES}
+
+
+def can(perm, u=None):
+    u = u if u is not None else current_user()
+    return bool(roles_of(u) & PERMISSIONS.get(perm, set()))
+
+
+def clean_roles(values):
+    """Accept 'Sales, Shipping' or a list; return canonical comma string in ROLES order."""
+    if isinstance(values, str):
+        values = values.split(",")
+    wanted = {v.strip().lower() for v in values if v and v.strip()}
+    unknown = wanted - {r.lower() for r in ROLES}
+    if unknown:
+        raise ValueError("Unknown role(s): " + ", ".join(sorted(unknown)) + ". Use: " + ", ".join(ROLES))
+    return ",".join(r for r in ROLES if r.lower() in wanted)
+
+
 def ensure_user_schema(c):
     c.executescript(USER_SCHEMA)
+    if "roles" not in {r[1] for r in c.execute("PRAGMA table_info(users)")}:
+        c.execute("ALTER TABLE users ADD COLUMN roles TEXT")
+    # Accounts from before roles existed: old admins become SuperAdmin; other staff stay view-only until given a role.
+    c.execute("UPDATE users SET roles='SuperAdmin' WHERE roles IS NULL AND is_admin=1")
+    c.execute("UPDATE users SET roles='' WHERE roles IS NULL")
+    sync_is_admin(c)
+
+
+def sync_is_admin(c):
+    # is_admin is kept for older code paths (product catalog admin): true for SuperAdmin or Admin.
+    c.execute("UPDATE users SET is_admin=CASE WHEN (','||COALESCE(roles,'')||',') LIKE '%,SuperAdmin,%' OR (','||COALESCE(roles,'')||',') LIKE '%,Admin,%' THEN 1 ELSE 0 END")
+
+
+def seed_users_from_env(c):
+    """Create accounts listed as CCM_USER_<anything>=username | Roles | password | Full name.
+
+    Read from real environment variables and from a Render Secret File
+    (CCM_USERS_FILE, default /etc/secrets/users.env). Existing accounts are never
+    changed, so passwords people set themselves are not overwritten.
+    """
+    entries = {k: v for k, v in os.environ.items() if k.startswith("CCM_USER_")}
+    path = os.environ.get("CCM_USERS_FILE") or "/etc/secrets/users.env"
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith("CCM_USER_") and "=" in line:
+                    k, v = line.split("=", 1)
+                    entries.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+    except OSError:
+        pass
+    for key, value in sorted(entries.items()):
+        parts = [p.strip() for p in value.split("|")]
+        if len(parts) < 3:
+            print(f"[users] {key}: expected 'username | Roles | password | Full name'; skipped")
+            continue
+        username, roles, password = parts[0], parts[1], parts[2]
+        full_name = parts[3] if len(parts) > 3 else ""
+        if "CHANGE_ME" in password.upper():
+            print(f"[users] {key}: password still CHANGE_ME; skipped")
+            continue
+        if c.execute("SELECT 1 FROM users WHERE username=?", (username,)).fetchone():
+            continue
+        try:
+            create_user(c, username, password, full_name, roles=roles)
+            print(f"[users] created {username} ({roles})")
+        except ValueError as e:
+            print(f"[users] {key}: {e}")
 
 
 def validate_password(password):
@@ -57,17 +161,19 @@ def validate_password(password):
     return None
 
 
-def create_user(c, username, password, full_name="", is_admin=False):
+def create_user(c, username, password, full_name="", is_admin=False, roles=None):
     username = (username or "").strip()
     if not username or len(username) > 60 or any(ch.isspace() for ch in username):
         raise ValueError("Username is required and cannot contain spaces.")
     problem = validate_password(password)
     if problem:
         raise ValueError(problem)
+    roles = clean_roles(roles if roles is not None else ("SuperAdmin" if is_admin else ""))
     try:
         c.execute(
-            "INSERT INTO users(username, full_name, password_hash, is_admin, created_at) VALUES (?,?,?,?,?)",
-            (username, (full_name or "").strip(), generate_password_hash(password), 1 if is_admin else 0, _iso(_now())),
+            "INSERT INTO users(username, full_name, password_hash, is_admin, created_at, roles) VALUES (?,?,?,?,?,?)",
+            (username, (full_name or "").strip(), generate_password_hash(password),
+             1 if set(roles.split(",")) & ADMIN_ROLES else 0, _iso(_now()), roles),
         )
     except sqlite3.IntegrityError:
         raise ValueError("That username is already taken.")
@@ -78,8 +184,8 @@ def current_user():
 
 
 def is_admin():
-    u = current_user()
-    return bool(u and u["is_admin"])
+    """SuperAdmin or Admin."""
+    return bool(roles_of(current_user()) & ADMIN_ROLES)
 
 
 def actor_name():
@@ -96,12 +202,23 @@ def admin_required(view):
     return wrapper
 
 
+def requires(perm):
+    def deco(view):
+        @wraps(view)
+        def wrapper(*args, **kwargs):
+            if not can(perm):
+                abort(403)
+            return view(*args, **kwargs)
+        return wrapper
+    return deco
+
+
 # --- Page chrome -----------------------------------------------------------
 
 USER_BLOCK = """<div style="margin-top:auto;padding:16px 13px 0;border-top:1px solid #ffffff22;font-size:12px;color:#b7c8d7">
-{% if g.user %}Signed in as <b style="color:#fff">{{ g.user.username }}</b>{% if g.user.is_admin %} (admin){% endif %}<br>
+{% if g.user %}Signed in as <b style="color:#fff">{{ g.user.username }}</b><br><span>{{ (g.user.roles or 'View only').replace(',', ' · ') }}</span><br>
 <a href="/account/password" style="color:#dce9f4;padding:6px 0;display:inline">Change password</a>
-{% if g.user.is_admin %} · <a href="/users" style="color:#dce9f4;padding:6px 0;display:inline">Users</a>{% endif %}
+{% if can('users_manage') %} · <a href="/users" style="color:#dce9f4;padding:6px 0;display:inline">Users</a>{% endif %}
 <form method="post" action="/logout" style="margin:8px 0 0"><button style="background:#2b5f88;color:#fff;border:0;border-radius:7px;padding:7px 12px;cursor:pointer;font:inherit;margin:0">Sign out</button></form>{% endif %}
 </div>"""
 
@@ -140,6 +257,27 @@ def simple_page(title, body, width=None, **ctx):
 
 # --- Routes ----------------------------------------------------------------
 
+# Which permission each page/action needs: (endpoint, method) -> permission. "*" = any method.
+ENDPOINT_PERMISSIONS = {
+    ("inventory_new", "*"): "receive",
+    ("transfer", "POST"): "move",
+    ("repair", "POST"): "unit_repair",
+    ("repair_new", "*"): "rma_create",
+    ("repair_update", "POST"): "rma_edit",
+    ("core_detail", "POST"): "core_work",
+    ("backup_download", "*"): "backup",
+    ("restore_upload", "*"): "restore",
+    ("clients_list", "*"): "client_view",
+    ("client_detail", "*"): "client_view",
+    ("client_new", "*"): "client_edit",
+    ("client_edit", "*"): "client_edit",
+    ("client_contact_add", "POST"): "client_edit",
+    ("client_contact_action", "POST"): "client_edit",
+    ("client_activity_add", "POST"): "client_edit",
+    ("compatibility", "POST"): "catalog_admin",
+    ("users", "*"): "users_manage",
+}
+
 def register_auth(app, conn):
     @app.before_request
     def load_user_and_protect():
@@ -169,7 +307,14 @@ def register_auth(app, conn):
             if request.method == "GET":
                 return redirect(url_for("login", next=request.full_path.rstrip("?")))
             abort(401)
+        perm = ENDPOINT_PERMISSIONS.get((request.endpoint, request.method)) or ENDPOINT_PERMISSIONS.get((request.endpoint, "*"))
+        if perm and not can(perm):
+            abort(403)
         return None
+
+    @app.context_processor
+    def permission_helpers():
+        return {"can": can, "user_roles": lambda: roles_of(current_user())}
 
     @app.after_request
     def security_headers(resp):
@@ -261,33 +406,60 @@ def register_auth(app, conn):
 <button>Change password</button></form></div>""", n=MIN_PASSWORD_LENGTH)
 
     @app.route("/users", methods=["GET", "POST"])
-    @admin_required
     def users():
         c = conn()
+        super_admin = can("admins_manage")
         try:
             if request.method == "POST":
                 f = request.form
                 action = f.get("action")
                 target = f.get("user_id", type=int)
                 try:
+                    def check_target(row, new_roles=None):
+                        if row is None:
+                            raise ValueError("User not found.")
+                        if row["id"] == g.user["id"]:
+                            raise ValueError("You can't change your own access. Ask another SuperAdmin.")
+                        touches_admin = roles_of(row) & ADMIN_ROLES or (new_roles is not None and set(new_roles.split(",")) & ADMIN_ROLES)
+                        if touches_admin and not super_admin:
+                            raise ValueError("Only a SuperAdmin can create or change Admin and SuperAdmin accounts.")
+
+                    def would_remove_last_superadmin(row, still_super):
+                        if "SuperAdmin" not in roles_of(row) or still_super:
+                            return False
+                        n = c.execute("SELECT COUNT(*) FROM users WHERE active=1 AND (','||COALESCE(roles,'')||',') LIKE '%,SuperAdmin,%'").fetchone()[0]
+                        return n <= 1
+
+                    row = c.execute("SELECT * FROM users WHERE id=?", (target,)).fetchone() if target else None
                     if action == "create":
-                        create_user(c, f.get("username"), f.get("password"), f.get("full_name"), f.get("is_admin") == "1")
-                        flash(f"Created user {f.get('username').strip()}. Give them their temporary password and ask them to change it.")
+                        roles = clean_roles(f.getlist("roles"))
+                        if set(roles.split(",")) & ADMIN_ROLES and not super_admin:
+                            raise ValueError("Only a SuperAdmin can create Admin or SuperAdmin accounts.")
+                        create_user(c, f.get("username"), f.get("password"), f.get("full_name"), roles=roles)
+                        flash(f"Created user {f.get('username').strip()} ({roles.replace(',', ', ') or 'view only'}). Give them their temporary password and ask them to change it.")
                     elif action == "reset":
+                        check_target(row)
                         problem = validate_password(f.get("password"))
                         if problem:
                             raise ValueError(problem)
                         c.execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(f["password"]), target))
-                        flash("Password reset.")
-                    elif action in ("deactivate", "activate", "make_admin", "remove_admin"):
-                        if target == g.user["id"]:
-                            raise ValueError("You can't change your own access. Ask another admin.")
-                        column, value = {"deactivate": ("active", 0), "activate": ("active", 1),
-                                         "make_admin": ("is_admin", 1), "remove_admin": ("is_admin", 0)}[action]
-                        c.execute(f"UPDATE users SET {column}=? WHERE id=?", (value, target))
-                        flash("User updated.")
+                        flash(f"Password reset for {row['username']}.")
+                    elif action == "roles":
+                        roles = clean_roles(f.getlist("roles"))
+                        check_target(row, roles)
+                        if would_remove_last_superadmin(row, "SuperAdmin" in roles.split(",")):
+                            raise ValueError("There must always be at least one active SuperAdmin.")
+                        c.execute("UPDATE users SET roles=?, full_name=? WHERE id=?", (roles, (f.get("full_name") or "").strip(), target))
+                        flash(f"Updated {row['username']}: {roles.replace(',', ', ') or 'view only'}.")
+                    elif action in ("deactivate", "activate"):
+                        check_target(row)
+                        if action == "deactivate" and would_remove_last_superadmin(row, False):
+                            raise ValueError("There must always be at least one active SuperAdmin.")
+                        c.execute("UPDATE users SET active=? WHERE id=?", (1 if action == "activate" else 0, target))
+                        flash(f"{row['username']} {'reactivated' if action == 'activate' else 'deactivated'}.")
                     else:
                         raise ValueError("Unknown action.")
+                    sync_is_admin(c)
                     c.commit()
                 except ValueError as e:
                     c.rollback()
@@ -296,26 +468,33 @@ def register_auth(app, conn):
             rows = c.execute("SELECT * FROM users ORDER BY active DESC, username").fetchall()
         finally:
             c.close()
+        assignable = ROLES if super_admin else [r for r in ROLES if r not in ADMIN_ROLES]
         return simple_page("Users", """
 <p><a href="/">Back to inventory</a></p>
 <div class="panel"><h1>Add a user</h1><form method="post"><input type="hidden" name="action" value="create">
 <label>Username</label><input name="username" required maxlength="60">
-<label>Full name</label><input name="full_name" maxlength="120">
+<label>Full name (shown to staff)</label><input name="full_name" maxlength="120">
 <label>Temporary password (at least {{ n }} characters)</label><input name="password" type="password" required minlength="{{ n }}" autocomplete="new-password">
-<label><input type="checkbox" name="is_admin" value="1"> Administrator (can manage users and the product database)</label>
+<label>Roles (tick one or more)</label>
+{% for r in assignable %}<label style="display:flex;align-items:center;gap:7px;font-weight:400;font-size:14px;margin:4px 0"><input type="checkbox" name="roles" value="{{ r }}"><span><b>{{ r }}</b> <span class="muted">· {{ help[r] }}</span></span></label>{% endfor %}
 <button>Add user</button></form></div>
-<div class="panel"><h1>Users</h1><div style="overflow-x:auto"><table>
-<tr><th>Username</th><th>Name</th><th>Role</th><th>Status</th><th>Last sign-in</th><th>Actions</th></tr>
-{% for u in rows %}<tr><td>{{ u.username }}</td><td>{{ u.full_name or '' }}</td>
-<td>{{ 'Admin' if u.is_admin else 'Staff' }}</td><td>{{ 'Active' if u.active else 'Deactivated' }}</td>
+<div class="panel"><h1>Users</h1>{% if not super_admin %}<p class="muted">Admins can manage Sales, Shipping and Technician accounts. Admin and SuperAdmin accounts are managed by a SuperAdmin.</p>{% endif %}<div style="overflow-x:auto"><table>
+<tr><th>Username</th><th>Name &amp; roles</th><th>Status</th><th>Last sign-in</th><th>Password / access</th></tr>
+{% for u in rows %}{% set urole = (u.roles or '').split(',') %}{% set locked = u.id == g.user.id or (not super_admin and ('Admin' in urole or 'SuperAdmin' in urole)) %}<tr>
+<td><b>{{ u.username }}</b></td>
+<td>{% if locked %}{{ u.full_name or '' }}<br><span class="muted">{{ (u.roles or 'View only').replace(',', ', ') }}</span>{% else %}
+<form method="post" style="min-width:330px"><input type="hidden" name="action" value="roles"><input type="hidden" name="user_id" value="{{ u.id }}">
+<input name="full_name" value="{{ u.full_name or '' }}" placeholder="Full name" style="margin-bottom:6px">
+<div style="display:flex;flex-wrap:wrap;gap:4px 14px">{% for r in assignable %}<label style="display:inline-flex;align-items:center;gap:5px;font-weight:400;font-size:13px;margin:0"><input type="checkbox" name="roles" value="{{ r }}" {% if r in urole %}checked{% endif %}>{{ r }}</label>{% endfor %}</div>
+<button class="secondary" style="margin-top:6px;padding:6px 10px">Save</button></form>{% endif %}</td>
+<td>{{ 'Active' if u.active else 'Deactivated' }}</td>
 <td class="muted">{{ (u.last_login_at or 'Never')[:16].replace('T',' ') }}</td>
-<td>{% if u.id != g.user.id %}<div class="inline">
+<td>{% if u.id == g.user.id %}<span class="muted">This is you</span>{% elif locked %}<span class="muted">SuperAdmin only</span>{% else %}<div class="inline">
 <form method="post" class="inline"><input type="hidden" name="action" value="reset"><input type="hidden" name="user_id" value="{{ u.id }}">
 <input type="password" name="password" placeholder="New password" minlength="{{ n }}" required autocomplete="new-password"><button class="secondary">Reset password</button></form>
-<form method="post"><input type="hidden" name="action" value="{{ 'remove_admin' if u.is_admin else 'make_admin' }}"><input type="hidden" name="user_id" value="{{ u.id }}"><button class="secondary">{{ 'Remove admin' if u.is_admin else 'Make admin' }}</button></form>
 <form method="post"><input type="hidden" name="action" value="{{ 'deactivate' if u.active else 'activate' }}"><input type="hidden" name="user_id" value="{{ u.id }}"><button class="{{ 'danger' if u.active else '' }}">{{ 'Deactivate' if u.active else 'Reactivate' }}</button></form>
-</div>{% else %}<span class="muted">This is you</span>{% endif %}</td></tr>{% endfor %}
-</table></div></div>""", width=1100, rows=rows, n=MIN_PASSWORD_LENGTH)
+</div>{% endif %}</td></tr>{% endfor %}
+</table></div></div>""", width=1250, rows=rows, n=MIN_PASSWORD_LENGTH, assignable=assignable, help=ROLE_HELP, super_admin=super_admin)
 
     @app.errorhandler(403)
     def forbidden(_e):

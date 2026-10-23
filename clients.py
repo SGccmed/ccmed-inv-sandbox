@@ -1,9 +1,9 @@
 """Client accounts (Salesforce / QuickBooks style): accounts, contacts, activity log and full history.
 
-Every client gets a permanent ID (CL-00001). Repairs and customer-owned (orange tape) inventory
-link to a client by that ID, so renaming a client never breaks its history.
+Every client gets a permanent ID (CL-00001). Repairs link to a client by that ID, so renaming a client never breaks its history.
 """
 import re
+import sqlite3
 from datetime import datetime, timezone
 from flask import request, redirect, flash, render_template_string, abort, g, jsonify
 from auth import add_user_block, actor_name
@@ -69,11 +69,13 @@ def ensure_client_schema(c):
     """Create client tables and link columns. Safe to run on every start and after a restore."""
     c.executescript(SCHEMA)
     add_column(c, 'customer_repairs', 'client_id', 'INTEGER')
-    add_column(c, 'units', 'tape', "TEXT")              # 'Blue' = ours, 'Orange' = not ours
-    add_column(c, 'units', 'owner_client_id', 'INTEGER')
-    add_column(c, 'core_items', 'tape', "TEXT")
-    c.execute("UPDATE units SET tape='Blue' WHERE tape IS NULL OR tape=''")
-    c.execute("UPDATE core_items SET tape='Blue' WHERE tape IS NULL OR tape=''")
+    # The blue/orange tape feature was removed; drop its columns from databases that have them.
+    for table, col in (('units', 'tape'), ('units', 'owner_client_id'), ('core_items', 'tape')):
+        if col in {r['name'] for r in c.execute(f'PRAGMA table_info({table})')}:
+            try:
+                c.execute(f'ALTER TABLE {table} DROP COLUMN {col}')
+            except sqlite3.OperationalError:
+                pass   # very old SQLite: column stays, unused
     # Older repairs only had a typed customer name: create one client per distinct name and link them.
     for r in c.execute("SELECT DISTINCT TRIM(customer) name FROM customer_repairs WHERE client_id IS NULL AND TRIM(COALESCE(customer,''))<>''").fetchall():
         existing = c.execute('SELECT id FROM clients WHERE name=? COLLATE NOCASE', (r['name'],)).fetchone()
@@ -110,20 +112,20 @@ def serial_matches(c, serial, exclude=None):
         return []
     out = []
     q = "REPLACE(REPLACE(UPPER(TRIM(COALESCE({0},''))),' ',''),char(9),'')=?"
-    for r in c.execute('SELECT id,inventory_code,manufacturer,product_raw,status,physical_location,location_raw,tape FROM units WHERE ' + q.format('serial'), (key,)):
+    for r in c.execute('SELECT id,inventory_code,manufacturer,product_raw,status,physical_location,location_raw FROM units WHERE ' + q.format('serial'), (key,)):
         if exclude != ('unit', r['id']):
             out.append({'kind': 'Stock (CC)', 'code': r['inventory_code'] or f"Legacy #{r['id']}", 'manufacturer': r['manufacturer'] or '',
                         'product': r['product_raw'], 'status': r['status'], 'where': r['physical_location'] or r['location_raw'] or '',
-                        'tape': r['tape'] or 'Blue', 'url': f"/unit/{r['id']}"})
-    for r in c.execute('SELECT id,inventory_code,manufacturer,product_raw,stage,location,tape FROM core_items WHERE ' + q.format('serial'), (key,)):
+                        'url': f"/unit/{r['id']}"})
+    for r in c.execute('SELECT id,inventory_code,manufacturer,product_raw,stage,location FROM core_items WHERE ' + q.format('serial'), (key,)):
         if exclude != ('core', r['id']):
             out.append({'kind': 'Core (CR)', 'code': r['inventory_code'], 'manufacturer': r['manufacturer'] or '', 'product': r['product_raw'],
-                        'status': r['stage'], 'where': r['location'] or '', 'tape': r['tape'] or 'Blue', 'url': f"/cores/{r['id']}"})
+                        'status': r['stage'], 'where': r['location'] or '', 'url': f"/cores/{r['id']}"})
     for r in c.execute('SELECT id,inventory_code,rma,customer,manufacturer,model,stage,location FROM customer_repairs WHERE ' + q.format('serial'), (key,)):
         if exclude != ('repair', r['id']):
             out.append({'kind': 'Customer repair (RP)', 'code': r['inventory_code'] or r['rma'], 'manufacturer': r['manufacturer'] or '',
                         'product': r['model'] or '', 'status': f"{r['stage']} · {r['rma']} · {r['customer']}", 'where': r['location'] or '',
-                        'tape': 'Orange', 'url': f"/repairs/{r['id']}"})
+                        'url': f"/repairs/{r['id']}"})
     for m in out:   # don't show "Philips Philips eL18-4" when the product name already includes the maker
         if m['manufacturer'] and m['product'].upper().startswith(m['manufacturer'].upper()):
             m['manufacturer'] = ''
@@ -146,11 +148,10 @@ a{color:#245d86}label{display:block;margin:0 0 4px;font-weight:600;font-size:12p
 .tabs{display:flex;gap:4px;border-bottom:2px solid #dfe7ef;margin-top:18px;flex-wrap:wrap}.tabs a{padding:9px 15px;text-decoration:none;color:#55697b;border-radius:8px 8px 0 0;font-weight:600}.tabs a.on{background:white;color:#245d86;border:1px solid #dfe7ef;border-bottom:2px solid white;margin-bottom:-2px}
 .tab{display:none}.tab.on{display:block}dl{display:grid;grid-template-columns:170px 1fr;gap:6px 14px;margin:0}dt{color:#667c8d}dd{margin:0;white-space:pre-line}
 .tl{border-left:3px solid #dfe7ef;margin-left:8px;padding-left:18px}.tl .ev{position:relative;padding:0 0 14px}.tl .ev:before{content:"";position:absolute;left:-26px;top:5px;width:11px;height:11px;border-radius:50%;background:#245d86}.tl .ev.Repair:before{background:#c47a12}.tl .ev.Inventory:before{background:#2f8a4a}.tl .ev.System:before{background:#9aa9b6}
-.tape{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:5px;vertical-align:-1px}.tape.Blue{background:#2563eb}.tape.Orange{background:#f97316}
 @media(max-width:900px){aside{position:static;width:auto;min-height:0}main{margin:0;padding:15px}.grid,.cards{grid-template-columns:1fr 1fr}.grid .wide{grid-column:span 2}}
 @media(max-width:560px){.grid,.cards{grid-template-columns:1fr}.grid .wide{grid-column:span 1}dl{grid-template-columns:1fr}}</style>'''
 LAYOUT = add_user_block('''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CC Medical | Clients</title>''' + STYLE + '''</head><body>
-<aside><h2>CC Medical</h2><a href="/">Inventory Dashboard</a><a href="/inventory/new">+ New Inventory</a><a class="active" href="/clients">Clients</a><a href="/products">Product Database</a><a href="/cores">Core Repairs (CR)</a><a href="/repairs">Customer Repairs (RP)</a></aside>
+<aside><h2>CC Medical</h2><a href="/">Inventory Dashboard</a>{% if can('receive') %}<a href="/inventory/new">+ New Inventory</a>{% endif %}<a class="active" href="/clients">Clients</a><a href="/products">Product Database</a><a href="/cores">Core Repairs (CR)</a><a href="/repairs">Customer Repairs (RP)</a></aside>
 <main>{% with msgs=get_flashed_messages() %}{% for m in msgs %}<div class="msg">{{m}}</div>{% endfor %}{% endwith %}{{body|safe}}</main></body></html>''')
 
 
@@ -158,8 +159,8 @@ def page(body, **ctx):
     return render_template_string(LAYOUT, body=render_template_string(body, **ctx))
 
 
-LIST_PAGE = '''<div class="toolbar" style="justify-content:space-between"><div><h1>Clients</h1><div class="muted">Accounts with contacts, activity and full repair / equipment history.</div></div><a class="btn" href="/clients/new">+ New Client</a></div>
-<div class="cards"><div class="card"><span>Total clients</span><strong>{{stats.total}}</strong></div><div class="card"><span>Active</span><strong>{{stats.active}}</strong></div><div class="card"><span>Prospects</span><strong>{{stats.prospect}}</strong></div><div class="card"><span>Clients with open repairs</span><strong>{{stats.open_clients}}</strong></div><div class="card"><span>Customer units on site (orange)</span><strong>{{stats.orange}}</strong></div></div>
+LIST_PAGE = '''<div class="toolbar" style="justify-content:space-between"><div><h1>Clients</h1><div class="muted">Accounts with contacts, activity and full repair / equipment history.</div></div>{% if can('client_edit') %}<a class="btn" href="/clients/new">+ New Client</a>{% endif %}</div>
+<div class="cards"><div class="card"><span>Total clients</span><strong>{{stats.total}}</strong></div><div class="card"><span>Active</span><strong>{{stats.active}}</strong></div><div class="card"><span>Prospects</span><strong>{{stats.prospect}}</strong></div><div class="card"><span>Clients with open repairs</span><strong>{{stats.open_clients}}</strong></div><div class="card"><span>Open RMAs</span><strong>{{stats.open_rmas}}</strong></div></div>
 <section><form class="toolbar"><div style="flex:1;min-width:240px"><label>Search</label><input name="q" value="{{q}}" placeholder="Name, client ID, phone, email, contact…"></div>
 <div><label>Type</label><select name="type"><option value="">All types</option>{% for t in types %}<option {% if t==type %}selected{% endif %}>{{t}}</option>{% endfor %}</select></div>
 <div><label>Status</label><select name="status"><option value="">All statuses</option>{% for s in statuses %}<option {% if s==status %}selected{% endif %}>{{s}}</option>{% endfor %}</select></div>
@@ -189,30 +190,28 @@ FORM_PAGE = '''<p><a href="{{'/clients/'~c.id if c else '/clients'}}">← {{'Bac
 
 DETAIL_PAGE = '''<p><a href="/clients">← Clients</a></p>
 <div class="toolbar" style="justify-content:space-between"><div><h1>{{c.name}}</h1><div class="muted">{{c.client_code}} · {{c.account_type or 'No type'}} · <span class="pill {{c.status}}">{{c.status}}</span>{% if c.account_owner %} · Owner: {{c.account_owner}}{% endif %}</div></div>
-<div class="toolbar"><a class="btn secondary" href="/clients/{{c.id}}/edit">Edit client</a><a class="btn" href="/repairs/new?client={{c.client_code|urlencode}}">+ New RMA</a></div></div>
-<div class="cards"><div class="card"><span>Open repairs</span><strong>{{kpi.open}}</strong></div><div class="card"><span>Total repairs</span><strong>{{kpi.total}}</strong></div><div class="card"><span>Avg. repair turnaround</span><strong>{{kpi.avg_days if kpi.avg_days is not none else '—'}}{% if kpi.avg_days is not none %} <small>days</small>{% endif %}</strong></div><div class="card"><span>Their units on site (orange)</span><strong>{{kpi.orange}}</strong></div><div class="card"><span>Client since</span><strong style="font-size:17px">{{c.created_at[:10]}}</strong></div></div>
-<nav class="tabs"><a href="#overview" class="on">Overview</a><a href="#contacts">Contacts ({{contacts|length}})</a><a href="#repairs">Repairs ({{repairs|length}})</a><a href="#equipment">Equipment ({{units|length}})</a><a href="#loaners">Loaners</a><a href="#sales">Sales</a><a href="#history">Full history ({{timeline|length}})</a></nav>
+<div class="toolbar">{% if can('client_edit') %}<a class="btn secondary" href="/clients/{{c.id}}/edit">Edit client</a>{% endif %}{% if can('rma_create') %}<a class="btn" href="/repairs/new?client={{c.client_code|urlencode}}">+ New RMA</a>{% endif %}</div></div>
+<div class="cards"><div class="card"><span>Open repairs</span><strong>{{kpi.open}}</strong></div><div class="card"><span>Total repairs</span><strong>{{kpi.total}}</strong></div><div class="card"><span>Avg. repair turnaround</span><strong>{{kpi.avg_days if kpi.avg_days is not none else '—'}}{% if kpi.avg_days is not none %} <small>days</small>{% endif %}</strong></div><div class="card"><span>Contacts</span><strong>{{contacts|length}}</strong></div><div class="card"><span>Client since</span><strong style="font-size:17px">{{c.created_at[:10]}}</strong></div></div>
+<nav class="tabs"><a href="#overview" class="on">Overview</a><a href="#contacts">Contacts ({{contacts|length}})</a><a href="#repairs">Repairs ({{repairs|length}})</a><a href="#loaners">Loaners</a><a href="#sales">Sales</a><a href="#history">Full history ({{timeline|length}})</a></nav>
 
 <div class="tab on" id="t-overview"><section><div class="grid"><div class="wide" style="grid-column:span 2"><dl>
 <dt>Main phone</dt><dd>{{c.phone or '—'}}</dd><dt>Main email</dt><dd>{% if c.email %}<a href="mailto:{{c.email}}">{{c.email}}</a>{% else %}—{% endif %}</dd><dt>Website</dt><dd>{{c.website or '—'}}</dd>
 <dt>Billing address</dt><dd>{{c.billing_address or '—'}}</dd><dt>Shipping address</dt><dd>{{c.shipping_address or '—'}}</dd><dt>Payment terms</dt><dd>{{c.payment_terms or '—'}}{% if c.tax_exempt %} · Tax exempt{% endif %}</dd>
 <dt>QuickBooks ID</dt><dd>{{c.quickbooks_id or 'Not linked'}}</dd><dt>Salesforce ID</dt><dd>{{c.salesforce_id or 'Not linked'}}</dd><dt>Notes</dt><dd>{{c.notes or '—'}}</dd></dl></div>
 <div><h2>Primary contact</h2>{% if primary %}<p><strong>{{primary.name}}</strong><br>{{primary.title or ''}}<br>{{primary.phone or ''}}<br>{% if primary.email %}<a href="mailto:{{primary.email}}">{{primary.email}}</a>{% endif %}</p>{% else %}<p class="muted">None set.</p>{% endif %}
-<h2 style="margin-top:18px">Log activity</h2><form method="post" action="/clients/{{c.id}}/activity"><select name="kind">{% for k in kinds %}<option>{{k}}</option>{% endfor %}</select><input name="subject" placeholder="Subject" required style="margin-top:8px"><textarea name="details" rows="3" placeholder="Details" style="margin-top:8px"></textarea><button style="margin-top:8px">Save activity</button></form></div></div></section>
+{% if can('client_edit') %}<h2 style="margin-top:18px">Log activity</h2><form method="post" action="/clients/{{c.id}}/activity"><select name="kind">{% for k in kinds %}<option>{{k}}</option>{% endfor %}</select><input name="subject" placeholder="Subject" required style="margin-top:8px"><textarea name="details" rows="3" placeholder="Details" style="margin-top:8px"></textarea><button style="margin-top:8px">Save activity</button></form>{% endif %}</div></div></section>
 <section><h2>Recent activity</h2><div class="tl">{% for e in timeline[:6] %}<div class="ev {{e.cat}}"><strong>{{e.title}}</strong> <span class="muted">· {{e.when[:16]|replace('T',' ')}}{% if e.actor %} · {{e.actor}}{% endif %}</span>{% if e.detail %}<div>{{e.detail}}</div>{% endif %}</div>{% else %}<p class="muted">No activity yet.</p>{% endfor %}</div><a href="#history">See full history →</a></section></div>
 
 <div class="tab" id="t-contacts"><section><h2>Contacts</h2><table><tr><th>Name</th><th>Title</th><th>Phone</th><th>Email</th><th></th></tr>{% for p in contacts %}<tr><td><strong>{{p.name}}</strong>{% if p.is_primary %} <span class="pill Active">Primary</span>{% endif %}</td><td>{{p.title or ''}}</td><td>{{p.phone or ''}}</td><td>{% if p.email %}<a href="mailto:{{p.email}}">{{p.email}}</a>{% endif %}</td>
-<td>{% if not p.is_primary %}<form method="post" action="/clients/{{c.id}}/contacts/{{p.id}}/primary" style="display:inline"><button class="secondary">Make primary</button></form> <form method="post" action="/clients/{{c.id}}/contacts/{{p.id}}/remove" style="display:inline"><button class="secondary">Remove</button></form>{% endif %}</td></tr>{% else %}<tr><td colspan="5">No contacts yet.</td></tr>{% endfor %}</table>
-<h2 style="margin-top:20px">Add contact</h2><form method="post" action="/clients/{{c.id}}/contacts" class="grid"><div><label>Name *</label><input name="name" required></div><div><label>Title</label><input name="title"></div><div><label>Phone</label><input name="phone"></div><div><label>Email</label><input name="email" type="email"></div><div><label>&nbsp;</label><label><input type="checkbox" name="is_primary" value="1" style="width:auto"> Primary contact</label></div><div><label>&nbsp;</label><button>Add contact</button></div></form></section></div>
+<td>{% if not p.is_primary and can('client_edit') %}<form method="post" action="/clients/{{c.id}}/contacts/{{p.id}}/primary" style="display:inline"><button class="secondary">Make primary</button></form> <form method="post" action="/clients/{{c.id}}/contacts/{{p.id}}/remove" style="display:inline"><button class="secondary">Remove</button></form>{% endif %}</td></tr>{% else %}<tr><td colspan="5">No contacts yet.</td></tr>{% endfor %}</table>
+{% if can('client_edit') %}<h2 style="margin-top:20px">Add contact</h2><form method="post" action="/clients/{{c.id}}/contacts" class="grid"><div><label>Name *</label><input name="name" required></div><div><label>Title</label><input name="title"></div><div><label>Phone</label><input name="phone"></div><div><label>Email</label><input name="email" type="email"></div><div><label>&nbsp;</label><label><input type="checkbox" name="is_primary" value="1" style="width:auto"> Primary contact</label></div><div><label>&nbsp;</label><button>Add contact</button></div></form>{% endif %}</section></div>
 
 <div class="tab" id="t-repairs"><section><h2>Customer repairs (RMAs)</h2><div style="overflow:auto"><table><tr><th>Inventory ID</th><th>RMA</th><th>Equipment</th><th>Serial</th><th>Stage</th><th>Received</th><th>Completed</th><th>Technician</th></tr>{% for r in repairs %}<tr><td>{{r.inventory_code or 'Legacy'}}</td><td><a href="/repairs/{{r.id}}"><strong>{{r.rma}}</strong></a></td><td>{{r.manufacturer or ''}} {{r.model or ''}}</td><td>{{r.serial or ''}}</td><td><span class="pill">{{r.stage}}</span></td><td>{{r.received_date}}</td><td>{{(r.completed_at or '')[:10]}}</td><td>{{r.technician or ''}}</td></tr>{% else %}<tr><td colspan="8">No repairs for this client.</td></tr>{% endfor %}</table></div></section></div>
-
-<div class="tab" id="t-equipment"><section><h2>Client-owned equipment on site <span class="tape Orange"></span><span class="muted" style="font-weight:400">orange tape</span></h2><div style="overflow:auto"><table><tr><th>Inventory ID</th><th>Product</th><th>Serial</th><th>Location</th><th>Status</th><th>Received</th></tr>{% for u in units %}<tr><td><a href="/unit/{{u.id}}"><span class="tape Orange"></span>{{u.inventory_code or 'Legacy #'~u.id}}</a></td><td>{{u.product_raw}}</td><td>{{u.serial or ''}}</td><td>{{u.physical_location or u.location_raw or ''}}</td><td>{{u.status}}</td><td>{{u.received_date or ''}}</td></tr>{% else %}<tr><td colspan="6">No client-owned stock items. (Units in for repair are under Repairs.)</td></tr>{% endfor %}</table></div></section></div>
 
 <div class="tab" id="t-loaners"><section><h2>Loaners</h2><p class="muted">Loaner tracking is the next module to be built. Loaners sent to this client will be listed here.</p></section></div>
 <div class="tab" id="t-sales"><section><h2>Sales</h2><p class="muted">Sales records will be listed here once sales tracking is built.</p></section></div>
 
-<div class="tab" id="t-history"><section><h2>Full history</h2><form class="toolbar" onsubmit="return false"><div><label>Show</label><select id="hf" onchange="filt()"><option value="">Everything</option><option>Activity</option><option>Repair</option><option>Inventory</option><option>System</option></select></div></form>
+<div class="tab" id="t-history"><section><h2>Full history</h2><form class="toolbar" onsubmit="return false"><div><label>Show</label><select id="hf" onchange="filt()"><option value="">Everything</option><option>Activity</option><option>Repair</option><option>System</option></select></div></form>
 <div class="tl" style="margin-top:16px">{% for e in timeline %}<div class="ev {{e.cat}}" data-cat="{{e.cat}}"><strong>{% if e.url %}<a href="{{e.url}}">{{e.title}}</a>{% else %}{{e.title}}{% endif %}</strong> <span class="muted">· {{e.cat}} · {{e.when[:16]|replace('T',' ')}}{% if e.actor %} · {{e.actor}}{% endif %}</span>{% if e.detail %}<div>{{e.detail}}</div>{% endif %}</div>{% else %}<p class="muted">No history yet.</p>{% endfor %}</div></section></div>
 <script>
 function show(h){h=(h||'#overview').slice(1);if(!document.getElementById('t-'+h))h='overview';document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.id==='t-'+h));document.querySelectorAll('.tabs a').forEach(a=>a.classList.toggle('on',a.getAttribute('href')==='#'+h))}
@@ -275,7 +274,7 @@ def register_client_routes(app, conn):
         rows = c.execute(sql + (' WHERE ' + ' AND '.join(where) if where else '') + ' ORDER BY c.name COLLATE NOCASE', args).fetchall()
         stats = c.execute('''SELECT COUNT(*) total, SUM(status='Active') active, SUM(status='Prospect') prospect,
           (SELECT COUNT(DISTINCT client_id) FROM customer_repairs WHERE stage<>'Completed' AND client_id IS NOT NULL) open_clients,
-          (SELECT COUNT(*) FROM units WHERE tape='Orange' AND status<>'Sold archive') orange FROM clients''').fetchone()
+          (SELECT COUNT(*) FROM customer_repairs WHERE stage<>'Completed' AND client_id IS NOT NULL) open_rmas FROM clients''').fetchone()
         owners = [r[0] for r in c.execute("SELECT DISTINCT account_owner FROM clients WHERE COALESCE(account_owner,'')<>'' ORDER BY 1")]
         c.close()
         return page(LIST_PAGE, rows=rows, stats=stats, q=q, type=typ, status=status, owner=owner, owners=owners,
@@ -373,7 +372,6 @@ def register_client_routes(app, conn):
         c = conn(); cl = get_client(c, cid)
         contacts = c.execute('SELECT * FROM client_contacts WHERE client_id=? AND active=1 ORDER BY is_primary DESC,name', (cid,)).fetchall()
         repairs = c.execute("SELECT * FROM customer_repairs WHERE client_id=? ORDER BY CASE WHEN stage='Completed' THEN 1 ELSE 0 END, received_date DESC", (cid,)).fetchall()
-        units = c.execute('SELECT * FROM units WHERE owner_client_id=? ORDER BY id DESC', (cid,)).fetchall()
         timeline = []
         for a in c.execute('SELECT * FROM client_activity WHERE client_id=?', (cid,)):
             timeline.append({'cat': 'System' if a['kind'] == 'System' else 'Activity', 'title': (a['kind'] + ': ' if a['kind'] != 'System' else '') + (a['subject'] or ''),
@@ -382,18 +380,13 @@ def register_client_routes(app, conn):
             eq = f"{h['manufacturer'] or ''} {h['model'] or ''}".strip()
             title = f"{h['rma']} received ({eq})" if h['old_stage'] is None else f"{h['rma']}: {h['old_stage']} → {h['new_stage']}"
             timeline.append({'cat': 'Repair', 'title': title, 'detail': h['note'] if h['old_stage'] is not None else '', 'when': h['changed_at'], 'actor': '', 'url': f"/repairs/{h['rid']}"})
-        for u in units:
-            when = u['received_date'] or ''
-            timeline.append({'cat': 'Inventory', 'title': f"Received {u['product_raw']} ({u['inventory_code'] or 'Legacy'}) — client-owned, orange tape",
-                             'detail': f"S/N {u['serial']}" if u['serial'] else '', 'when': when, 'actor': '', 'url': f"/unit/{u['id']}"})
         timeline.sort(key=lambda e: e['when'] or '', reverse=True)
         done = [r for r in repairs if r['completed_at']]
         avg = None
         if done:
             from datetime import date
             avg = round(sum(max(0, (datetime.fromisoformat(r['completed_at']).date() - date.fromisoformat(r['received_date'])).days) for r in done) / len(done), 1)
-        kpi = {'open': sum(1 for r in repairs if r['stage'] != 'Completed'), 'total': len(repairs), 'avg_days': avg,
-               'orange': sum(1 for u in units if u['status'] != 'Sold archive')}
+        kpi = {'open': sum(1 for r in repairs if r['stage'] != 'Completed'), 'total': len(repairs), 'avg_days': avg}
         c.close()
         return page(DETAIL_PAGE, c=cl, contacts=contacts, primary=contacts[0] if contacts and contacts[0]['is_primary'] else None,
-                    repairs=repairs, units=units, timeline=timeline, kpi=kpi, kinds=ACTIVITY_KINDS)
+                    repairs=repairs, timeline=timeline, kpi=kpi, kinds=ACTIVITY_KINDS)

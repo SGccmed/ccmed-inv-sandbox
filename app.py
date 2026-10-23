@@ -3,7 +3,7 @@ from datetime import datetime, timezone, date, timedelta
 from pathlib import Path
 from flask import Flask,request,render_template_string,redirect,url_for,flash,session,g,send_file,abort
 from openpyxl import load_workbook
-from auth import register_auth,ensure_user_schema,create_user,add_user_block,validate_password
+from auth import register_auth,ensure_user_schema,create_user,add_user_block,validate_password,can,roles_of,seed_users_from_env,ADMIN_ROLES
 from clients import register_client_routes,ensure_client_schema,resolve_client,serial_matches,serial_key,client_label
 BASE=Path(__file__).resolve().parent
 # The database location can be changed with the CCM_DB_PATH environment variable.
@@ -86,6 +86,14 @@ def days_since(ts):
 def age_class(days,stage):
  if stage=='Completed':return 'complete'
  return 'red' if days>7 else 'yellow' if days>3 else 'normal'
+def repair_stage_options(current):
+ # Which stages the signed-in user may move an RMA to (always includes the current stage).
+ roles=roles_of(g.user)
+ if roles & ADMIN_ROLES:return list(REPAIR_STAGES)
+ allowed={current}
+ if 'Technician' in roles and current!='Completed':allowed.update(REPAIR_STAGES[:5])   # Open Repairs .. Ready to Ship
+ if 'Shipping' in roles and current=='Ready to Ship':allowed.add('Completed')
+ return [s for s in REPAIR_STAGES if s in allowed]
 def repair_context(r):
  d=dict(r)
  d['stage_days']=days_since(d['stage_started_at']) if d['stage']!='Completed' else 0
@@ -144,13 +152,13 @@ def amount(value,label,required=False):
  except ValueError:raise ValueError(label+' must be a nonnegative number')
 
 def entry_row(f):
- return {k:str(f.get(k,'') or '').strip() for k in ('type','manufacturer','product','serial','location','supplier','cost','condition','notes','customer','rma','technician','received_date','tape','owner')}
+ return {k:str(f.get(k,'') or '').strip() for k in ('type','manufacturer','product','serial','location','supplier','cost','condition','notes','customer','rma','technician','received_date')}
 
 @app.route('/inventory/new',methods=['GET','POST'])
 def inventory_new():
  if request.method=='GET':return render_template_string(ENTRY_TEMPLATE,today=date.today().isoformat())
  # Multiple-row entry is atomic: invalid rows do not result in partial receiving.
- f=request.form;fields=('type','manufacturer','product','serial','location','supplier','cost','condition','notes','customer','rma','technician','received_date','tape','owner')
+ f=request.form;fields=('type','manufacturer','product','serial','location','supplier','cost','condition','notes','customer','rma','technician','received_date')
  length=max((len(f.getlist(k+'[]')) for k in fields),default=0)
  rows=[];c=conn();ensure_entry_schema(c)
  for i in range(length):
@@ -160,15 +168,10 @@ def inventory_new():
   if not row['type'] or row['type'] not in ('CC','CR','RP'):c.close();return f'Row {n}: select CC, CR or RP',400
   if not row['product']:c.close();return f'Row {n}: model / product is required',400
   if row['type']=='RP' and (not row['customer'] or not row['rma']):c.close();return f'Row {n}: customer and unique RMA are required for RP items',400
-  # Tape colour: blue = ours, orange = not ours. Customer repairs are always orange.
-  row['tape']='Orange' if row['type']=='RP' else ('Orange' if row['tape']=='Orange' else 'Blue')
   row['client']=None
   if row['type']=='RP':
    row['client']=resolve_client(c,row['customer'])
    if row['client'] is None:c.close();return f'Row {n}: customer "{row["customer"]}" is not in the client list. Pick one from the list or add it under Clients first.',400
-  elif row['tape']=='Orange':
-   row['client']=resolve_client(c,row['owner'])
-   if row['client'] is None and row['type']=='CC':c.close();return f'Row {n}: orange-tape (not ours) stock needs an owner. Pick the client who owns it.',400
   try:
    if row['received_date']:date.fromisoformat(row['received_date'])
    row['cost_value']=amount(row['cost'],'Purchase cost')
@@ -191,12 +194,12 @@ def inventory_new():
    typ=row['type'];code=new_inventory_code(c,typ);codes.append(code)
    received=row['received_date'] or date.today().isoformat()
    if typ=='CC':
-    c.execute("""INSERT INTO units(manufacturer,product_raw,product_key,serial,cost,dom,notes,location_raw,physical_location,status,condition,review,inventory_code,supplier,received_date,entry_batch_id,tape,owner_client_id)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-     (row['manufacturer'],row['product'],norm(row['product']),row['serial'],row['cost_value'],'',row['notes'],row['location'],row['location'],'Active',row['condition'] or 'Unspecified','',code,row['supplier'],received,batch,row['tape'],row['client']['id'] if row['client'] else None))
+    c.execute("""INSERT INTO units(manufacturer,product_raw,product_key,serial,cost,dom,notes,location_raw,physical_location,status,condition,review,inventory_code,supplier,received_date,entry_batch_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+     (row['manufacturer'],row['product'],norm(row['product']),row['serial'],row['cost_value'],'',row['notes'],row['location'],row['location'],'Active',row['condition'] or 'Unspecified','',code,row['supplier'],received,batch))
    elif typ=='CR':
-    c.execute("""INSERT INTO core_items(inventory_code,manufacturer,product_raw,serial,location,supplier,original_cost,notes,created_at,tape)
-     VALUES (?,?,?,?,?,?,?,?,?,?)""",(code,row['manufacturer'],row['product'],row['serial'],row['location'],row['supplier'],row['cost_value'],row['notes'],now_iso(),row['tape']))
+    c.execute("""INSERT INTO core_items(inventory_code,manufacturer,product_raw,serial,location,supplier,original_cost,notes,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?)""",(code,row['manufacturer'],row['product'],row['serial'],row['location'],row['supplier'],row['cost_value'],row['notes'],now_iso()))
    else:
     now=now_iso()
     cur=c.execute("""INSERT INTO customer_repairs(rma,customer,manufacturer,model,part_number,serial,location,received_date,technician,notes,stage,stage_started_at,created_at,updated_at,inventory_code,client_id)
@@ -240,6 +243,7 @@ def core_detail(cid):
     if result not in ('Passed','Failed') or not tech:raise ValueError('QC result and technician required')
     c.execute('UPDATE core_items SET qc_result=?,qc_technician=?,qc_date=?,qc_notes=?,stage=? WHERE id=?',(result,tech,now_iso(),f.get('notes','').strip(),'Ready for Stock' if result=='Passed' else 'In Repair',cid))
    elif action=='convert':
+    if not can('core_convert'):raise ValueError('Only an Admin can convert a core into stock')
     if core['stage']!='Ready for Stock' or core['qc_result']!='Passed':raise ValueError('Passing QC is required before conversion')
     repair_cost=c.execute('SELECT COALESCE(SUM(labor_cost+parts_cost+other_cost),0) FROM core_transactions WHERE core_id=?',(cid,)).fetchone()[0]
     code=new_inventory_code(c,'CC');total=round(core['original_cost']+repair_cost,2)
@@ -307,15 +311,19 @@ def repair_detail(rid):
  history=c.execute('SELECT * FROM customer_repair_history WHERE repair_id=? ORDER BY id DESC',(rid,)).fetchall()
  cl=c.execute('SELECT * FROM clients WHERE id=?',(r['client_id'],)).fetchone() if r['client_id'] else None
  same=serial_matches(c,r['serial'],exclude=('repair',rid));c.close()
- return render_template_string(REPAIR_TEMPLATE,mode='detail',r=repair_context(r),history=history,stages=REPAIR_STAGES,client=cl,client_text=client_label(cl) if cl else r['customer'],same_serial=same)
+ return render_template_string(REPAIR_TEMPLATE,mode='detail',r=repair_context(r),history=history,stages=repair_stage_options(r['stage']),client=cl,client_text=client_label(cl) if cl else r['customer'],same_serial=same)
 @app.post('/repairs/<int:rid>/update')
 def repair_update(rid):
  f=request.form;new_stage=f.get('stage','')
  if new_stage not in REPAIR_STAGES:return 'Invalid repair stage',400
  c=conn();c.executescript(REPAIR_SCHEMA);r=c.execute('SELECT * FROM customer_repairs WHERE id=?',(rid,)).fetchone()
  if r is None:c.close();return 'RMA not found',404
- client=resolve_client(c,f.get('customer',''))
- if client is None:c.close();flash('Customer must be picked from the client list.');return redirect(url_for('repair_detail',rid=rid))
+ if new_stage not in repair_stage_options(r['stage']):c.close();flash('Your role can\'t move this RMA from '+r['stage']+' to '+new_stage+'.');return redirect(url_for('repair_detail',rid=rid))
+ if can('rma_create'):
+  client=resolve_client(c,f.get('customer',''))
+  if client is None:c.close();flash('Customer must be picked from the client list.');return redirect(url_for('repair_detail',rid=rid))
+ else:  # e.g. technicians: customer can't be changed
+  client={'id':r['client_id'],'name':r['customer']}
  now=now_iso();stage_changed=new_stage!=r['stage']
  # A completed RMA can be reopened; completion timestamp is cleared in that case.
  complete=now if stage_changed and new_stage=='Completed' else (None if stage_changed else r['completed_at'])
@@ -340,9 +348,8 @@ def unit(uid):
  if not u:c.close();return 'Not found',404
  moves=c.execute('SELECT * FROM movements WHERE unit_id=? ORDER BY id DESC',(uid,)).fetchall()
  unit_repairs=c.execute('SELECT * FROM repair_orders WHERE unit_id=? ORDER BY id DESC',(uid,)).fetchall()
- owner=c.execute('SELECT * FROM clients WHERE id=?',(u['owner_client_id'],)).fetchone() if u['owner_client_id'] else None
  same=serial_matches(c,u['serial'],exclude=('unit',uid));c.close()
- return render_template_string(TEMPLATE,view=u['status'],unit=u,overview={},all_count=0,movements=moves,unit_repairs=unit_repairs,owner=owner,same_serial=same)
+ return render_template_string(TEMPLATE,view=u['status'],unit=u,overview={},all_count=0,movements=moves,unit_repairs=unit_repairs,same_serial=same)
 @app.post('/transfer/<int:uid>')
 def transfer(uid):
  new=norm(request.form.get('location'));status,physical=classify(new)
@@ -358,7 +365,7 @@ def repair(uid):
 @app.get('/admin/backup')
 def backup_download():
  # Admins can download a consistent copy of the whole database.
- if not g.user['is_admin']:abort(403)
+ if not can('backup'):abort(403)
  import tempfile
  tmp=Path(tempfile.mkdtemp())/('ccmedical-backup-'+datetime.now().strftime('%Y%m%d-%H%M')+'.db')
  src=conn();dst=sqlite3.connect(tmp);src.backup(dst);dst.close();src.close()
@@ -375,7 +382,7 @@ RESTORE_PAGE='''<p><a href="/products/admin">Back to admin</a></p><div class="pa
 def restore_upload():
  # Admin-only: replace the live database with an uploaded SQLite file.
  from auth import simple_page
- if not g.user['is_admin']:abort(403)
+ if not can('restore'):abort(403)
  if request.method=='GET':return simple_page('Restore database',RESTORE_PAGE,width=640)
  f=request.files.get('file')
  if not f or request.form.get('confirm')!='yes':flash('Choose a file and tick the confirmation box.');return redirect(url_for('restore_upload'))
@@ -396,13 +403,18 @@ def restore_upload():
  live=conn();s_db=sqlite3.connect(safety);live.backup(s_db);s_db.close()
  current_users=[dict(r) for r in live.execute('SELECT * FROM users')]
  src=sqlite3.connect(up);src.backup(live);src.close();live.close()
- init_db()
- c=conn()
- if c.execute('SELECT COUNT(*) FROM users').fetchone()[0]==0:
+ # If the uploaded file has no accounts, copy the current ones back BEFORE anything else creates users,
+ # so everyone keeps the same logins (and the same account IDs).
+ c=conn();ensure_user_schema(c)
+ file_has_users=c.execute('SELECT COUNT(*) FROM users').fetchone()[0]>0
+ if not file_has_users:
+  have={r[1] for r in c.execute('PRAGMA table_info(users)')}
   for u in current_users:
-   cols=list(u.keys());c.execute('INSERT INTO users('+','.join(cols)+') VALUES ('+','.join('?'*len(cols))+')',[u[k] for k in cols])
-  c.commit()
- c.close()
+   cols=[k for k in u.keys() if k in have];c.execute('INSERT INTO users('+','.join(cols)+') VALUES ('+','.join('?'*len(cols))+')',[u[k] for k in cols])
+ c.commit();c.close()
+ init_db()
+ # The restored file brought its own accounts (IDs may differ), so sign in again.
+ if file_has_users:session.clear()
  return send_file(safety,as_attachment=True,download_name=safety.name)
 
 from product_database import register_product_routes
@@ -420,6 +432,7 @@ def init_db():
  if u and pw and c.execute('SELECT COUNT(*) FROM users').fetchone()[0]==0:
   try:create_user(c,u,pw,is_admin=True);print('Created initial admin user',u)
   except ValueError as e:print('Initial admin not created:',e)
+ seed_users_from_env(c)
  c.commit();c.close()
 init_db()
 

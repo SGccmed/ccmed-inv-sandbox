@@ -20,6 +20,8 @@ if out.exists():
 os.environ['CCM_DB_PATH'] = str(out)
 os.environ.setdefault('CCM_SECRET', 'seed-only')  # don't write a .secret_key file
 os.environ.pop('CCM_INITIAL_ADMIN_USER', None); os.environ.pop('CCM_INITIAL_ADMIN_PASSWORD', None)
+for _k in [k for k in os.environ if k.startswith('CCM_USER_')]: os.environ.pop(_k)
+os.environ['CCM_USERS_FILE'] = os.devnull   # demo file must never contain accounts
 import app as A                      # runs init_db(): units, repairs, cores, users tables
 import product_database as P
 
@@ -199,13 +201,6 @@ for i, (name, (typ, status, terms, owner)) in enumerate(CLIENT_INFO.items(), sta
 # Link the demo repairs to their client records
 for name, cid in client_ids.items():
     c.execute('UPDATE customer_repairs SET client_id=? WHERE customer=?', (cid, name))
-# Every item so far is ours (blue tape); add a few customer-owned (orange tape) units held on site
-c.execute("UPDATE units SET tape='Blue'"); c.execute("UPDATE core_items SET tape='Blue'")
-for k, name in enumerate(['Demo Valley Imaging', 'Sample Regional Hospital', 'Sample Regional Hospital', 'Pretend Mobile Ultrasound', 'Example Vet Hospital']):
-    m, x, cat = rnd.choice([t for t in ALL_MODELS if t[2] != 'PTS']); age = rnd.randint(3, 40)
-    c.execute("""INSERT INTO units(manufacturer,product_raw,product_key,serial,cost,dom,notes,location_raw,physical_location,status,condition,review,inventory_code,supplier,received_date,tape,owner_client_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (m, f'{m} {x}', A.norm(f'{m} {x}'), serial(), 0.0, '', rnd.choice(['Consignment - sell on behalf of client', 'Held for client (storage)', 'Client trade-in pending appraisal']),
-        'D5', 'D5', 'Active', 'Used - Good', '', new_code('CC', age), '', d(age), 'Orange', client_ids[name]))
 # Re-use one existing serial on a different manufacturer's product to show the S/N alert
 src = c.execute("SELECT serial FROM units WHERE inventory_code LIKE 'CC-%' AND serial<>'' ORDER BY id LIMIT 1").fetchone()[0]
 c.execute("UPDATE core_items SET serial=? WHERE id=(SELECT MIN(id) FROM core_items)", (src,))

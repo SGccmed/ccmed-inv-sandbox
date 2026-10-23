@@ -6,6 +6,7 @@ inventory.db
 *.db-shm
 .secret_key
 .env
+users.env
 
 # Company spreadsheets stay off GitHub
 *.xlsx
