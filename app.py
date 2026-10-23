@@ -4,6 +4,7 @@ from pathlib import Path
 from flask import Flask,request,render_template_string,redirect,url_for,flash,session,g,send_file,abort
 from openpyxl import load_workbook
 from auth import register_auth,ensure_user_schema,create_user,add_user_block,validate_password
+from clients import register_client_routes,ensure_client_schema,resolve_client,serial_matches,serial_key,client_label
 BASE=Path(__file__).resolve().parent
 # The database location can be changed with the CCM_DB_PATH environment variable.
 DB=Path(os.environ.get('CCM_DB_PATH') or BASE/'inventory.db')
@@ -143,30 +144,46 @@ def amount(value,label,required=False):
  except ValueError:raise ValueError(label+' must be a nonnegative number')
 
 def entry_row(f):
- return {k:str(f.get(k,'') or '').strip() for k in ('type','manufacturer','product','serial','location','supplier','cost','condition','notes','customer','rma','technician','received_date')}
+ return {k:str(f.get(k,'') or '').strip() for k in ('type','manufacturer','product','serial','location','supplier','cost','condition','notes','customer','rma','technician','received_date','tape','owner')}
 
 @app.route('/inventory/new',methods=['GET','POST'])
 def inventory_new():
  if request.method=='GET':return render_template_string(ENTRY_TEMPLATE,today=date.today().isoformat())
  # Multiple-row entry is atomic: invalid rows do not result in partial receiving.
- f=request.form;fields=('type','manufacturer','product','serial','location','supplier','cost','condition','notes','customer','rma','technician','received_date')
+ f=request.form;fields=('type','manufacturer','product','serial','location','supplier','cost','condition','notes','customer','rma','technician','received_date','tape','owner')
  length=max((len(f.getlist(k+'[]')) for k in fields),default=0)
- rows=[]
+ rows=[];c=conn();ensure_entry_schema(c)
  for i in range(length):
   row={k:(f.getlist(k+'[]')[i].strip() if i<len(f.getlist(k+'[]')) else '') for k in fields}
   if not any(row.values()):continue
-  if not row['type'] or row['type'] not in ('CC','CR','RP'):return 'Select CC, CR or RP for every row',400
-  if not row['product']:return 'Model / product is required for every row',400
-  if row['type']=='RP' and (not row['customer'] or not row['rma']):return 'Customer and unique RMA are required for RP items',400
+  n=len(rows)+1
+  if not row['type'] or row['type'] not in ('CC','CR','RP'):c.close();return f'Row {n}: select CC, CR or RP',400
+  if not row['product']:c.close();return f'Row {n}: model / product is required',400
+  if row['type']=='RP' and (not row['customer'] or not row['rma']):c.close();return f'Row {n}: customer and unique RMA are required for RP items',400
+  # Tape colour: blue = ours, orange = not ours. Customer repairs are always orange.
+  row['tape']='Orange' if row['type']=='RP' else ('Orange' if row['tape']=='Orange' else 'Blue')
+  row['client']=None
+  if row['type']=='RP':
+   row['client']=resolve_client(c,row['customer'])
+   if row['client'] is None:c.close();return f'Row {n}: customer "{row["customer"]}" is not in the client list. Pick one from the list or add it under Clients first.',400
+  elif row['tape']=='Orange':
+   row['client']=resolve_client(c,row['owner'])
+   if row['client'] is None and row['type']=='CC':c.close();return f'Row {n}: orange-tape (not ours) stock needs an owner. Pick the client who owns it.',400
   try:
    if row['received_date']:date.fromisoformat(row['received_date'])
    row['cost_value']=amount(row['cost'],'Purchase cost')
-  except ValueError as e:return str(e),400
+  except ValueError as e:c.close();return f'Row {n}: '+str(e),400
   rows.append(row)
- if not rows:return 'Enter at least one item',400
- c=conn()
+ if not rows:c.close();return 'Enter at least one item',400
+ # Serial numbers are not unique keys (different manufacturers can repeat them), so matches only raise an alert.
+ alerts=[];seen={}
+ for i,row in enumerate(rows,1):
+  k=serial_key(row['serial'])
+  if not k:continue
+  for m in serial_matches(c,row['serial']):alerts.append(f"S/N {row['serial']} (row {i}) also on {m['code']} — {m['manufacturer']} {m['product']} [{m['status']}]")
+  if k in seen:alerts.append(f"S/N {row['serial']} entered on rows {seen[k]} and {i}")
+  seen.setdefault(k,i)
  try:
-  ensure_entry_schema(c)
   c.execute('BEGIN IMMEDIATE')
   batch=c.execute('INSERT INTO receiving_batches(created_at,item_count) VALUES (?,?)',(now_iso(),len(rows))).lastrowid
   codes=[]
@@ -174,21 +191,23 @@ def inventory_new():
    typ=row['type'];code=new_inventory_code(c,typ);codes.append(code)
    received=row['received_date'] or date.today().isoformat()
    if typ=='CC':
-    c.execute("""INSERT INTO units(manufacturer,product_raw,product_key,serial,cost,dom,notes,location_raw,physical_location,status,condition,review,inventory_code,supplier,received_date,entry_batch_id)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-     (row['manufacturer'],row['product'],norm(row['product']),row['serial'],row['cost_value'],'',row['notes'],row['location'],row['location'],'Active',row['condition'] or 'Unspecified','',code,row['supplier'],received,batch))
+    c.execute("""INSERT INTO units(manufacturer,product_raw,product_key,serial,cost,dom,notes,location_raw,physical_location,status,condition,review,inventory_code,supplier,received_date,entry_batch_id,tape,owner_client_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+     (row['manufacturer'],row['product'],norm(row['product']),row['serial'],row['cost_value'],'',row['notes'],row['location'],row['location'],'Active',row['condition'] or 'Unspecified','',code,row['supplier'],received,batch,row['tape'],row['client']['id'] if row['client'] else None))
    elif typ=='CR':
-    c.execute("""INSERT INTO core_items(inventory_code,manufacturer,product_raw,serial,location,supplier,original_cost,notes,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?)""",(code,row['manufacturer'],row['product'],row['serial'],row['location'],row['supplier'],row['cost_value'],row['notes'],now_iso()))
+    c.execute("""INSERT INTO core_items(inventory_code,manufacturer,product_raw,serial,location,supplier,original_cost,notes,created_at,tape)
+     VALUES (?,?,?,?,?,?,?,?,?,?)""",(code,row['manufacturer'],row['product'],row['serial'],row['location'],row['supplier'],row['cost_value'],row['notes'],now_iso(),row['tape']))
    else:
     now=now_iso()
-    cur=c.execute("""INSERT INTO customer_repairs(rma,customer,manufacturer,model,part_number,serial,location,received_date,technician,notes,stage,stage_started_at,created_at,updated_at,inventory_code)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(row['rma'],row['customer'],row['manufacturer'],row['product'],'',row['serial'],row['location'],received,row['technician'],row['notes'],'Open Repairs',now,now,now,code))
+    cur=c.execute("""INSERT INTO customer_repairs(rma,customer,manufacturer,model,part_number,serial,location,received_date,technician,notes,stage,stage_started_at,created_at,updated_at,inventory_code,client_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(row['rma'],row['client']['name'],row['manufacturer'],row['product'],'',row['serial'],row['location'],received,row['technician'],row['notes'],'Open Repairs',now,now,now,code,row['client']['id']))
     c.execute('INSERT INTO customer_repair_history(repair_id,old_stage,new_stage,changed_at,note) VALUES (?,?,?,?,?)',(cur.lastrowid,None,'Open Repairs',now,'Received through New Inventory Entry'))
   c.commit()
  except (sqlite3.Error,ValueError) as e:
   c.rollback();c.close();return 'Receiving not saved: '+str(e),400
- c.close();flash('Saved '+str(len(codes))+' items: '+', '.join(codes));return redirect(url_for('inventory_new'))
+ c.close();flash('Saved '+str(len(codes))+' items: '+', '.join(codes))
+ for a in alerts:flash('⚠ Serial number alert: '+a)
+ return redirect(url_for('inventory_new'))
 
 @app.route('/cores')
 def cores():
@@ -260,39 +279,49 @@ def repair_new():
  if request.method=='POST':
   f=request.form;rma=f.get('rma','').strip();customer=f.get('customer','').strip();received=f.get('received_date','').strip()
   if not rma or not customer:flash('RMA number and customer are required.');return redirect(url_for('repair_new'))
+  c=conn();ensure_entry_schema(c);client=resolve_client(c,customer);c.close()
+  if client is None:flash('"'+customer+'" is not in the client list. Pick a client from the list, or add them under Clients first.');return redirect(url_for('repair_new'))
   try:date.fromisoformat(received)
   except ValueError:flash('Enter a valid received date.');return redirect(url_for('repair_new'))
   now=now_iso();c=conn();c.executescript(REPAIR_SCHEMA);ensure_entry_schema(c)
   try:
    c.execute('BEGIN IMMEDIATE')
    rp_code=new_inventory_code(c,'RP')
-   cur=c.execute('INSERT INTO customer_repairs(rma,customer,manufacturer,model,part_number,serial,location,received_date,technician,notes,stage,stage_started_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-    (rma,customer,f.get('manufacturer','').strip(),f.get('model','').strip(),f.get('part_number','').strip(),f.get('serial','').strip(),f.get('location','').strip(),received,f.get('technician','').strip(),f.get('notes','').strip(),'Open Repairs',now,now,now))
+   cur=c.execute('INSERT INTO customer_repairs(rma,customer,manufacturer,model,part_number,serial,location,received_date,technician,notes,stage,stage_started_at,created_at,updated_at,client_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+    (rma,client['name'],f.get('manufacturer','').strip(),f.get('model','').strip(),f.get('part_number','').strip(),f.get('serial','').strip(),f.get('location','').strip(),received,f.get('technician','').strip(),f.get('notes','').strip(),'Open Repairs',now,now,now,client['id']))
    c.execute('UPDATE customer_repairs SET inventory_code=? WHERE id=?',(rp_code,cur.lastrowid))
    rid=cur.lastrowid
    c.execute('INSERT INTO customer_repair_history(repair_id,old_stage,new_stage,changed_at,note) VALUES (?,?,?,?,?)',(rid,None,'Open Repairs',now,'RMA created'))
    c.commit()
   except sqlite3.IntegrityError:
    c.rollback();c.close();flash('This RMA number already exists. Each item needs its own unique RMA.');return redirect(url_for('repair_new'))
-  c.close();flash('RMA created in Open Repairs');return redirect(url_for('repair_detail',rid=rid))
- return render_template_string(REPAIR_TEMPLATE,mode='new',stages=REPAIR_STAGES,today=date.today().isoformat())
+  c=conn();prior=serial_matches(c,f.get('serial',''),exclude=('repair',rid));c.close()
+  flash('RMA created in Open Repairs')
+  for m in prior:flash('⚠ Serial number alert: this S/N is also on '+m['code']+' — '+m['manufacturer']+' '+m['product']+' ['+m['status']+']')
+  return redirect(url_for('repair_detail',rid=rid))
+ return render_template_string(REPAIR_TEMPLATE,mode='new',stages=REPAIR_STAGES,today=date.today().isoformat(),preset_client=request.args.get('client',''))
 @app.route('/repairs/<int:rid>')
 def repair_detail(rid):
  c=conn();c.executescript(REPAIR_SCHEMA);r=c.execute('SELECT * FROM customer_repairs WHERE id=?',(rid,)).fetchone()
  if r is None:c.close();return 'RMA not found',404
- history=c.execute('SELECT * FROM customer_repair_history WHERE repair_id=? ORDER BY id DESC',(rid,)).fetchall();c.close()
- return render_template_string(REPAIR_TEMPLATE,mode='detail',r=repair_context(r),history=history,stages=REPAIR_STAGES)
+ history=c.execute('SELECT * FROM customer_repair_history WHERE repair_id=? ORDER BY id DESC',(rid,)).fetchall()
+ cl=c.execute('SELECT * FROM clients WHERE id=?',(r['client_id'],)).fetchone() if r['client_id'] else None
+ same=serial_matches(c,r['serial'],exclude=('repair',rid));c.close()
+ return render_template_string(REPAIR_TEMPLATE,mode='detail',r=repair_context(r),history=history,stages=REPAIR_STAGES,client=cl,client_text=client_label(cl) if cl else r['customer'],same_serial=same)
 @app.post('/repairs/<int:rid>/update')
 def repair_update(rid):
  f=request.form;new_stage=f.get('stage','')
  if new_stage not in REPAIR_STAGES:return 'Invalid repair stage',400
  c=conn();c.executescript(REPAIR_SCHEMA);r=c.execute('SELECT * FROM customer_repairs WHERE id=?',(rid,)).fetchone()
  if r is None:c.close();return 'RMA not found',404
+ client=resolve_client(c,f.get('customer',''))
+ if client is None:c.close();flash('Customer must be picked from the client list.');return redirect(url_for('repair_detail',rid=rid))
  now=now_iso();stage_changed=new_stage!=r['stage']
  # A completed RMA can be reopened; completion timestamp is cleared in that case.
  complete=now if stage_changed and new_stage=='Completed' else (None if stage_changed else r['completed_at'])
  c.execute('UPDATE customer_repairs SET customer=?,manufacturer=?,model=?,part_number=?,serial=?,location=?,technician=?,notes=?,stage=?,stage_started_at=?,completed_at=?,updated_at=? WHERE id=?',
- (f.get('customer','').strip() or r['customer'],f.get('manufacturer','').strip(),f.get('model','').strip(),f.get('part_number','').strip(),f.get('serial','').strip(),f.get('location','').strip(),f.get('technician','').strip(),f.get('notes','').strip(),new_stage,now if stage_changed else r['stage_started_at'],complete,now,rid))
+ (client['name'],f.get('manufacturer','').strip(),f.get('model','').strip(),f.get('part_number','').strip(),f.get('serial','').strip(),f.get('location','').strip(),f.get('technician','').strip(),f.get('notes','').strip(),new_stage,now if stage_changed else r['stage_started_at'],complete,now,rid))
+ if client['id']!=r['client_id']:c.execute('UPDATE customer_repairs SET client_id=? WHERE id=?',(client['id'],rid))
  if stage_changed:c.execute('INSERT INTO customer_repair_history(repair_id,old_stage,new_stage,changed_at,note) VALUES (?,?,?,?,?)',(rid,r['stage'],new_stage,now,f.get('change_note','').strip()))
  c.commit();c.close();flash('RMA updated');return redirect(url_for('repair_detail',rid=rid))
 
@@ -310,8 +339,10 @@ def unit(uid):
  c=conn();u=c.execute('SELECT * FROM units WHERE id=?',(uid,)).fetchone()
  if not u:c.close();return 'Not found',404
  moves=c.execute('SELECT * FROM movements WHERE unit_id=? ORDER BY id DESC',(uid,)).fetchall()
- unit_repairs=c.execute('SELECT * FROM repair_orders WHERE unit_id=? ORDER BY id DESC',(uid,)).fetchall();c.close()
- return render_template_string(TEMPLATE,view=u['status'],unit=u,overview={},all_count=0,movements=moves,unit_repairs=unit_repairs)
+ unit_repairs=c.execute('SELECT * FROM repair_orders WHERE unit_id=? ORDER BY id DESC',(uid,)).fetchall()
+ owner=c.execute('SELECT * FROM clients WHERE id=?',(u['owner_client_id'],)).fetchone() if u['owner_client_id'] else None
+ same=serial_matches(c,u['serial'],exclude=('unit',uid));c.close()
+ return render_template_string(TEMPLATE,view=u['status'],unit=u,overview={},all_count=0,movements=moves,unit_repairs=unit_repairs,owner=owner,same_serial=same)
 @app.post('/transfer/<int:uid>')
 def transfer(uid):
  new=norm(request.form.get('location'));status,physical=classify(new)
@@ -377,10 +408,11 @@ def restore_upload():
 from product_database import register_product_routes
 register_auth(app,conn)
 register_product_routes(app,conn,BASE)
+register_client_routes(app,conn)
 
 def init_db():
  c=conn()
- c.executescript(SCHEMA);c.executescript(REPAIR_SCHEMA);ensure_entry_schema(c);ensure_user_schema(c)
+ c.executescript(SCHEMA);c.executescript(REPAIR_SCHEMA);ensure_entry_schema(c);ensure_user_schema(c);ensure_client_schema(c)
  c.execute("UPDATE units SET status='Rental' WHERE UPPER(TRIM(location_raw))='RENTAL' AND status='On loan'")
  # On a host without a console, the first admin can come from environment variables.
  # This only runs while there are no users at all.

@@ -25,6 +25,13 @@ To import the existing inventory spreadsheet (sheet named "Location"):
 python app.py import "C:\path\to\inventory.xlsx"
 ```
 
+## Clients, tape colour and serial alerts
+
+- **Clients** (sidebar): every account gets a permanent ID (`CL-00001`) with contacts, payment terms, account owner, an activity log (calls, emails, quotes, notes) and a full history of repairs and client-owned equipment. Customer repairs pick their customer from this list.
+- **Tape colour** on New Inventory: blue = ours, orange = not ours. Orange stock must name the client that owns it; customer repairs (RP) are always orange.
+- **Serial numbers are not unique keys.** Each item's inventory ID is its key. When a serial already exists anywhere (stock, cores or repairs), the form shows an alert while typing and after saving, but still lets you save, because different manufacturers can share serials.
+- **Demo data:** `python seed_demo.py` builds `demo_inventory.db` (fake data, no user accounts). Upload it at **/admin/restore**.
+
 ## Put it on the web with Render and Cloudflare
 
 The app runs on Render. Its database lives on a Render **persistent disk**, because Render erases everything else on each restart or deploy. Persistent disks need a paid instance (the `starter` plan in `render.yaml`). On the free plan, your data would be lost.
