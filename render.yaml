@@ -1,0 +1,25 @@
+# Render Blueprint: creates the web service and its persistent disk.
+# The database lives on the disk at /var/data, so it survives restarts and redeploys.
+services:
+  - type: web
+    name: ccmedical-inventory
+    runtime: python
+    plan: starter            # a paid plan is required for persistent disks
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:application --workers 2 --threads 4 --timeout 120
+    healthCheckPath: /healthz
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: CCM_DB_PATH
+        value: /var/data/inventory.db
+      - key: CCM_SECRET
+        generateValue: true
+      - key: CCM_INITIAL_ADMIN_USER
+        sync: false          # Render asks you for this when you create the service
+      - key: CCM_INITIAL_ADMIN_PASSWORD
+        sync: false

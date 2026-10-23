@@ -7,6 +7,7 @@ from auth import register_auth,ensure_user_schema,create_user,add_user_block,val
 BASE=Path(__file__).resolve().parent
 # The database location can be changed with the CCM_DB_PATH environment variable.
 DB=Path(os.environ.get('CCM_DB_PATH') or BASE/'inventory.db')
+DB.parent.mkdir(parents=True,exist_ok=True)
 def load_secret_key():
  # Use CCM_SECRET if set; otherwise create a random key once and keep it next to the database.
  if os.environ.get('CCM_SECRET'):return os.environ['CCM_SECRET']
@@ -24,10 +25,13 @@ app.config.update(
  # Secure (HTTPS-only) cookies are on by default; running locally with `python app.py` turns them off.
  SESSION_COOKIE_SECURE=os.environ.get('CCM_SECURE_COOKIES','1')=='1',
  PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
- MAX_CONTENT_LENGTH=6*1024*1024)
+ MAX_CONTENT_LENGTH=100*1024*1024)
+# Render and Cloudflare sit in front of the app; trust one proxy hop for the visitor's IP.
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app=ProxyFix(app.wsgi_app,x_for=1,x_proto=1,x_host=1)
 SCHEMA='''CREATE TABLE IF NOT EXISTS units(id INTEGER PRIMARY KEY,source_sheet TEXT,source_row INTEGER,manufacturer TEXT,product_raw TEXT,product_key TEXT,serial TEXT,cost REAL,dom TEXT,notes TEXT,location_raw TEXT,physical_location TEXT,status TEXT,condition TEXT,review TEXT, UNIQUE(source_sheet,source_row)); CREATE TABLE IF NOT EXISTS movements(id INTEGER PRIMARY KEY,unit_id INTEGER,old_location TEXT,new_location TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,note TEXT); CREATE TABLE IF NOT EXISTS repair_orders(id INTEGER PRIMARY KEY,unit_id INTEGER,repair_type TEXT,status TEXT DEFAULT 'Open',notes TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP); CREATE TABLE IF NOT EXISTS integration_links(id INTEGER PRIMARY KEY,unit_id INTEGER,system TEXT,external_id TEXT,sync_state TEXT DEFAULT 'not_synced');'''
 def conn():
- c=sqlite3.connect(DB);c.row_factory=sqlite3.Row;return c
+ c=sqlite3.connect(DB,timeout=15);c.row_factory=sqlite3.Row;return c
 def norm(s):return re.sub(r'\s+',' ',str(s or '').strip()).upper()
 def classify(loc):
  s=norm(loc)
@@ -329,6 +333,47 @@ def backup_download():
  src=conn();dst=sqlite3.connect(tmp);src.backup(dst);dst.close();src.close()
  return send_file(tmp,as_attachment=True,download_name=tmp.name)
 
+RESTORE_PAGE='''<p><a href="/products/admin">Back to admin</a></p><div class="panel"><h1>Restore database from a backup</h1>
+<p>Upload an <b>inventory.db</b> file (for example, the one from your computer, or a backup downloaded from this site). It replaces <b>all</b> current inventory data. A safety copy of the current database is downloaded automatically first, so keep it until you've checked the restored data.</p>
+<p>User accounts on this site are kept if the uploaded file has none.</p>
+<form method="post" enctype="multipart/form-data"><label>Database file</label><input type="file" name="file" accept=".db,.sqlite,.sqlite3" required>
+<label><input type="checkbox" name="confirm" value="yes" required style="width:auto"> I understand this replaces all current data</label>
+<button class="danger">Restore database</button></form></div>'''
+
+@app.route('/admin/restore',methods=['GET','POST'])
+def restore_upload():
+ # Admin-only: replace the live database with an uploaded SQLite file.
+ from auth import simple_page
+ if not g.user['is_admin']:abort(403)
+ if request.method=='GET':return simple_page('Restore database',RESTORE_PAGE,width=640)
+ f=request.files.get('file')
+ if not f or request.form.get('confirm')!='yes':flash('Choose a file and tick the confirmation box.');return redirect(url_for('restore_upload'))
+ import tempfile
+ work=Path(tempfile.mkdtemp());up=work/'upload.db';f.save(up)
+ try:
+  if up.read_bytes()[:16]!=b'SQLite format 3\x00':raise ValueError('That file is not a SQLite database.')
+  t=sqlite3.connect(up)
+  try:
+   if t.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise ValueError('That database file is damaged.')
+   tables={r[0] for r in t.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+   if 'units' not in tables:raise ValueError('That file is not a CC Medical inventory database.')
+  finally:t.close()
+ except (ValueError,sqlite3.DatabaseError) as e:
+  flash(str(e) if isinstance(e,ValueError) else 'That file could not be read as a database.');return redirect(url_for('restore_upload'))
+ # Keep a safety copy of the current data, then copy the upload into the live database.
+ safety=work/('before-restore-'+datetime.now().strftime('%Y%m%d-%H%M')+'.db')
+ live=conn();s_db=sqlite3.connect(safety);live.backup(s_db);s_db.close()
+ current_users=[dict(r) for r in live.execute('SELECT * FROM users')]
+ src=sqlite3.connect(up);src.backup(live);src.close();live.close()
+ init_db()
+ c=conn()
+ if c.execute('SELECT COUNT(*) FROM users').fetchone()[0]==0:
+  for u in current_users:
+   cols=list(u.keys());c.execute('INSERT INTO users('+','.join(cols)+') VALUES ('+','.join('?'*len(cols))+')',[u[k] for k in cols])
+  c.commit()
+ c.close()
+ return send_file(safety,as_attachment=True,download_name=safety.name)
+
 from product_database import register_product_routes
 register_auth(app,conn)
 register_product_routes(app,conn,BASE)
@@ -337,6 +382,12 @@ def init_db():
  c=conn()
  c.executescript(SCHEMA);c.executescript(REPAIR_SCHEMA);ensure_entry_schema(c);ensure_user_schema(c)
  c.execute("UPDATE units SET status='Rental' WHERE UPPER(TRIM(location_raw))='RENTAL' AND status='On loan'")
+ # On a host without a console, the first admin can come from environment variables.
+ # This only runs while there are no users at all.
+ u,pw=os.environ.get('CCM_INITIAL_ADMIN_USER'),os.environ.get('CCM_INITIAL_ADMIN_PASSWORD')
+ if u and pw and c.execute('SELECT COUNT(*) FROM users').fetchone()[0]==0:
+  try:create_user(c,u,pw,is_admin=True);print('Created initial admin user',u)
+  except ValueError as e:print('Initial admin not created:',e)
  c.commit();c.close()
 init_db()
 
