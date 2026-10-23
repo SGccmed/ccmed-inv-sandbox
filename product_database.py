@@ -1,12 +1,15 @@
+import json
 import os
-import hmac
 import re
+import secrets
 import sqlite3
 from pathlib import Path
-from flask import request,render_template_string,redirect,url_for,flash,session
+from flask import request,render_template_string,redirect,url_for,flash,session,g
 from openpyxl import load_workbook
+from auth import is_admin, actor_name, add_user_block
 SCHEMA="""CREATE TABLE IF NOT EXISTS products(id INTEGER PRIMARY KEY, category TEXT NOT NULL, manufacturer TEXT,model TEXT NOT NULL,display_name TEXT NOT NULL,short_description TEXT,technical_specs TEXT,description_source TEXT,spec_source TEXT,review_notes TEXT,review_status TEXT NOT NULL DEFAULT 'Pending Review',active INTEGER NOT NULL DEFAULT 1,created_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(category,manufacturer,model));
-CREATE TABLE IF NOT EXISTS product_part_numbers(id INTEGER PRIMARY KEY,product_id INTEGER NOT NULL,part_number TEXT NOT NULL,source_url TEXT,verification TEXT NOT NULL DEFAULT 'Pending Verification',UNIQUE(product_id,part_number));
+CREATE TABLE IF NOT EXISTS product_part_numbers(id INTEGER PRIMARY KEY,product_id INTEGER NOT NULL,part_number TEXT NOT NULL,source_url TEXT,verification TEXT NOT NULL DEFAULT 'Pending Verification',active INTEGER NOT NULL DEFAULT 1,UNIQUE(product_id,part_number));
+CREATE TABLE IF NOT EXISTS product_import_staging(token TEXT PRIMARY KEY,user_id INTEGER,rows_json TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS product_requests(id INTEGER PRIMARY KEY,category TEXT,manufacturer TEXT,model TEXT,part_number TEXT,notes TEXT,request_type TEXT DEFAULT 'New Product',status TEXT DEFAULT 'Pending',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS product_audit(id INTEGER PRIMARY KEY,product_id INTEGER,action TEXT,old_value TEXT,new_value TEXT,actor TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS product_compatibility(id INTEGER PRIMARY KEY,probe_id INTEGER NOT NULL,system_id INTEGER NOT NULL,source_url TEXT,UNIQUE(probe_id,system_id));
@@ -15,19 +18,23 @@ CREATE TABLE IF NOT EXISTS product_manufacturers(name TEXT PRIMARY KEY,active IN
 CREATE TABLE IF NOT EXISTS product_categories(code TEXT PRIMARY KEY,label TEXT NOT NULL,active INTEGER DEFAULT 1);"""
 STYLE='''<style>body{margin:0;background:#f3f6fa;color:#1b3043;font:14px/1.5 Segoe UI,Arial,sans-serif}aside{width:220px;background:#112a42;min-height:100vh;padding:22px 15px;position:fixed;box-sizing:border-box}aside a{display:block;color:#dce9f4;padding:11px;text-decoration:none;border-radius:7px}aside a:hover{background:#2b5f88}aside h2{color:white}main{margin-left:220px;padding:30px;max-width:1500px}section{background:white;border:1px solid #dfe7ef;border-radius:12px;padding:20px;margin:15px 0}input,select,textarea{padding:9px;border:1px solid #cbd8e2;border-radius:6px;max-width:100%;box-sizing:border-box}button,.btn{background:#245d86;color:white;border:0;border-radius:7px;padding:10px 14px;cursor:pointer;text-decoration:none;display:inline-block}table{width:100%;border-collapse:collapse}td,th{padding:10px;border-bottom:1px solid #e5edf3;text-align:left;vertical-align:top}th{background:#f0f5f9}a{color:#245d86}label{display:block;margin:9px 0 4px;font-weight:bold}.muted{color:#667c8d}.row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}.row>*{max-width:100%}.msg{padding:10px;background:#e8f6eb;border-radius:8px}@media(max-width:700px){aside{position:static;width:auto;min-height:0}main{margin:0;padding:15px}}</style>'''
 LAY='''<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>CC Medical | Product Database</title>'''+STYLE+'''</head><body><aside><h2>CC Medical</h2><a href="/">Inventory Dashboard</a><a href="/inventory/new">New Inventory</a><a href="/products">Product Database</a><a href="/cores">Core Repairs</a><a href="/repairs">Customer Repairs</a><a href="/products/admin">Admin Mode</a></aside><main>{% with msgs=get_flashed_messages() %}{% for m in msgs %}<p class="msg">{{m}}</p>{% endfor %}{% endwith %}{{body|safe}}</main></body></html>'''
+LAY=add_user_block(LAY)
 def render(body,**kwargs):
  from flask import render_template_string
  return render_template_string(LAY,body=render_template_string(body,**kwargs))
 def clean(x):return str(x or '').strip()
 def key(x):return re.sub(r'\s+',' ',clean(x)).upper()
-def admin():return session.get('product_admin') is True
+def admin():return is_admin()
 def register_product_routes(app,conn,base):
  def setup(c):
   c.executescript(SCHEMA)
+  # Older databases were created without the part-number 'active' column.
+  if 'active' not in {r['name'] for r in c.execute('PRAGMA table_info(product_part_numbers)')}:
+   c.execute('ALTER TABLE product_part_numbers ADD COLUMN active INTEGER NOT NULL DEFAULT 1')
   for code,label in [('SYS','Ultrasound Systems'),('PRB','Ultrasound Probes'),('PTS','Parts / Accessories')]:c.execute('INSERT OR IGNORE INTO product_categories(code,label) VALUES (?,?)',(code,label))
   for name in ['GE','Philips','Siemens','Canon/Toshiba','Samsung','Mindray','Fujifilm/SonoSite']:c.execute('INSERT OR IGNORE INTO product_manufacturers(name) VALUES (?)',(name,))
   c.commit()
- def audit(c,pid,action,old,new):c.execute('INSERT INTO product_audit(product_id,action,old_value,new_value,actor) VALUES (?,?,?,?,?)',(pid,action,old,new,'Temporary Admin' if admin() else 'Unidentified employee'))
+ def audit(c,pid,action,old,new):c.execute('INSERT INTO product_audit(product_id,action,old_value,new_value,actor) VALUES (?,?,?,?,?)',(pid,action,old,new,actor_name()))
  def seed(c):
   if c.execute('SELECT COUNT(*) FROM products').fetchone()[0]:return
   path=base/'CC_Medical_Product_Master_Research.xlsx'
@@ -44,7 +51,7 @@ def register_product_routes(app,conn,base):
   c=conn();setup(c);seed(c);q=clean(request.args.get('q'));category=clean(request.args.get('category'));where=['1=1'];args=[]
   if q:where.append('''(p.display_name LIKE ? OR p.model LIKE ? OR p.manufacturer LIKE ? OR EXISTS(SELECT 1 FROM product_part_numbers pn WHERE pn.product_id=p.id AND pn.part_number LIKE ?))''');args+=['%'+q+'%']*4
   if category:where.append('p.category=?');args.append(category)
-  rows=c.execute('SELECT p.*,(SELECT GROUP_CONCAT(part_number,", ") FROM product_part_numbers WHERE product_id=p.id AND active=1) parts FROM products p WHERE '+' AND '.join(where)+' ORDER BY p.display_name LIMIT 1000',args).fetchall();c.close()
+  rows=c.execute('SELECT p.*,(SELECT GROUP_CONCAT(part_number,", ") FROM product_part_numbers pn2 WHERE pn2.product_id=p.id AND pn2.active=1) parts FROM products p WHERE '+' AND '.join(where)+' ORDER BY p.display_name LIMIT 1000',args).fetchall();c.close()
   return render('''<h1>Product Database</h1><p class="muted">Master products only · No serial numbers, inventory costs or locations. Research is verified per source; unverified OEM part numbers remain blank.</p><section><form class="row"><input name="q" value="{{q}}" placeholder="Search manufacturer, model or OEM part number" style="min-width:320px"><select name="category"><option value="">All categories</option>{% for v in ['SYS','PRB','PTS'] %}<option value="{{v}}" {% if v==category %}selected{% endif %}>{{v}}</option>{% endfor %}</select><button>Search</button><a class="btn" href="/products/request">Request Product</a></form></section><section><h3>{{rows|length}} products shown</h3><div style="overflow:auto"><table><tr><th>Category</th><th>Manufacturer</th><th>Product</th><th>OEM Part Numbers</th><th>Review</th></tr>{% for p in rows %}<tr><td>{{p.category}}</td><td>{{p.manufacturer or 'Needs review'}}</td><td><a href="/products/{{p.id}}">{{p.display_name}}</a></td><td>{{p.parts or 'Not verified'}}</td><td>{{p.review_status}}</td></tr>{% endfor %}</table></div></section>''',rows=rows,q=q,category=category)
  @app.route('/products/<int:pid>')
  def detail(pid):
@@ -97,17 +104,11 @@ def register_product_routes(app,conn,base):
    if not model and not part:c.close();return 'Model or part number required',400
    c.execute('INSERT INTO product_requests(category,manufacturer,model,part_number,notes,request_type) VALUES (?,?,?,?,?,?)',(clean(f.get('category')),clean(f.get('manufacturer')),model,part,clean(f.get('notes')),typ));c.commit();c.close();flash('Request submitted for administrator review');return redirect('/products')
   return render('''<h1>Request Product / OEM Part Number</h1><section><form method="post"><label>Request Type</label><select name="request_type"><option>New Product</option><option {% if request_type=='Part Number' %}selected{% endif %}>Part Number</option><option>Correction</option></select><label>Category</label><select name="category"><option>PRB</option><option>SYS</option><option>PTS</option></select><label>Manufacturer</label><input name="manufacturer"><label>Model / Product Name</label><input name="model"><label>OEM Part Number (if applicable)</label><input name="part_number"><label>Notes / source URL / existing product ID</label><textarea name="notes" rows="3" style="width:100%">{% if product_id %}Existing product ID: {{product_id}}{% endif %}</textarea><p><button>Submit Request</button></p></form></section>''',request_type=request.args.get('request_type'),product_id=request.args.get('product_id'))
- @app.route('/products/admin',methods=['GET','POST'])
+ @app.route('/products/admin')
  def product_admin():
-  password=os.environ.get('CCM_ADMIN_PASSWORD')
-  if request.method=='POST':
-   if request.form.get('logout'):session.pop('product_admin',None);return redirect('/products')
-   if not password:return 'Set CCM_ADMIN_PASSWORD before using administrator features.',503
-   if hmac.compare_digest(clean(request.form.get('password')),password):session['product_admin']=True
-   else:flash('Incorrect password')
-  if not admin():return render('''<h1>Administrator Access</h1><p>Set CCM_ADMIN_PASSWORD in Windows before starting the app. This is a temporary local admin gate, not employee authentication.</p><section><form method="post"><input type="password" name="password" required placeholder="Admin password"><button>Sign in</button></form></section>''')
+  if not admin():return render('''<h1>Administrator access required</h1><section><p>Product database administration is limited to admin accounts. Ask an administrator to give your account admin access on the Users page.</p></section>'''),403
   c=conn();setup(c);pending=c.execute("SELECT * FROM product_requests WHERE status='Pending' ORDER BY id DESC").fetchall();c.close()
-  return render('''<h1>Product Database Administration</h1><form method="post"><button name="logout" value="1">Sign out</button></form><section><h3>Pending Requests ({{pending|length}})</h3>{% for r in pending %}<form method="post" action="/products/admin/request/{{r.id}}" style="border-bottom:1px solid #ddd;padding:12px 0"><strong>#{{r.id}} {{r.request_type}}</strong> — {{r.manufacturer}} {{r.model}} {{r.part_number}}<p>{{r.notes}}</p><input name="product_id" placeholder="Existing Product ID (for part number)" type="number"><input name="source_url" placeholder="OEM source URL"><select name="action"><option value="approve">Approve</option><option value="reject">Reject</option></select><button>Apply</button></form>{% else %}<p>No pending requests.</p>{% endfor %}</section><section><h3>Excel Product Import</h3><p>Import requires an administrator-confirmed preview. Upload only a trusted XLSX file.</p><form method="post" action="/products/admin/import/preview" enctype="multipart/form-data"><input type="file" name="file" accept=".xlsx" required><button>Preview Import</button></form></section>''',pending=pending)
+  return render('''<h1>Product Database Administration</h1><p><a href="/users">Manage users</a> · <a href="/admin/backup">Download database backup</a></p><section><h3>Pending Requests ({{pending|length}})</h3>{% for r in pending %}<form method="post" action="/products/admin/request/{{r.id}}" style="border-bottom:1px solid #ddd;padding:12px 0"><strong>#{{r.id}} {{r.request_type}}</strong> — {{r.manufacturer}} {{r.model}} {{r.part_number}}<p>{{r.notes}}</p><input name="product_id" placeholder="Existing Product ID (for part number)" type="number"><input name="source_url" placeholder="OEM source URL"><select name="action"><option value="approve">Approve</option><option value="reject">Reject</option></select><button>Apply</button></form>{% else %}<p>No pending requests.</p>{% endfor %}</section><section><h3>Excel Product Import</h3><p>Import requires an administrator-confirmed preview. Upload only a trusted XLSX file.</p><form method="post" action="/products/admin/import/preview" enctype="multipart/form-data"><input type="file" name="file" accept=".xlsx" required><button>Preview Import</button></form></section>''',pending=pending)
  @app.post('/products/admin/request/<int:rid>')
  def approve_request(rid):
   if not admin():return 'Admin access required',403
@@ -157,15 +158,21 @@ def register_product_routes(app,conn,base):
    if not v('Model / Product Name'):continue
    if v('Category') not in ('SYS','PRB','PTS'):continue
    rows.append({'category':v('Category'),'manufacturer':v('Manufacturer'),'model':v('Model / Product Name'),'display_name':v('Display Name'),'short_description':v('Product Description (Web Research)'),'description_source':v('Description Source URL'),'technical_specs':v('Technical Specifications'),'spec_source':v('Specifications Source URL'),'review_notes':v('Review Notes')})
-  session['product_import_rows']=rows
-  c=conn();setup(c);existing={(r['category'],key(r['manufacturer']),key(r['model'])) for r in c.execute('SELECT category,manufacturer,model FROM products')};c.close();new=sum((r['category'],key(r['manufacturer']),key(r['model'])) not in existing for r in rows)
+  token=secrets.token_urlsafe(16)
+  c=conn();setup(c)
+  c.execute("DELETE FROM product_import_staging WHERE created_at<datetime('now','-1 day')")
+  c.execute('INSERT INTO product_import_staging(token,user_id,rows_json) VALUES (?,?,?)',(token,g.user['id'],json.dumps(rows)));c.commit()
+  session['product_import_token']=token
+  existing={(r['category'],key(r['manufacturer']),key(r['model'])) for r in c.execute('SELECT category,manufacturer,model FROM products')};c.close();new=sum((r['category'],key(r['manufacturer']),key(r['model'])) not in existing for r in rows)
   return render('''<h1>Import Preview</h1><section><p>{{rows|length}} valid rows; {{new}} possible new products; {{rows|length-new}} existing or duplicate rows. Only new products are inserted; existing product data is never overwritten.</p><p>OEM part numbers are not imported without separate verification.</p><form method="post" action="/products/admin/import/confirm"><button>Confirm Import</button></form><p><a href="/products/admin">Cancel</a></p></section><section><table><tr><th>Category</th><th>Manufacturer</th><th>Model</th></tr>{% for r in rows[:40] %}<tr><td>{{r.category}}</td><td>{{r.manufacturer}}</td><td>{{r.model}}</td></tr>{% endfor %}</table></section>''',rows=rows,new=new)
  @app.post('/products/admin/import/confirm')
  def import_confirm():
   if not admin():return 'Admin access required',403
-  rows=session.pop('product_import_rows',None)
-  if rows is None:return 'No preview in this session',400
-  c=conn();setup(c);added=0
+  token=session.pop('product_import_token',None)
+  c=conn();setup(c)
+  staged=c.execute('SELECT rows_json FROM product_import_staging WHERE token=? AND user_id=?',(token,g.user['id'])).fetchone() if token else None
+  if staged is None:c.close();return 'No import preview found. Upload the file again.',400
+  rows=json.loads(staged['rows_json']);c.execute('DELETE FROM product_import_staging WHERE token=?',(token,));added=0
   for r in rows:
    existing=c.execute('SELECT id FROM products WHERE category=? AND COALESCE(manufacturer,"")=? AND UPPER(model)=?',(r['category'],r['manufacturer'],key(r['model']))).fetchone()
    if existing:continue

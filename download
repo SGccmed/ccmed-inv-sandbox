@@ -1,0 +1,18 @@
+# Live data and secrets: never commit these
+inventory.db
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.secret_key
+.env
+
+# Company spreadsheets stay off GitHub
+*.xlsx
+*.xls
+*.csv
+
+__pycache__/
+*.pyc
+.venv/
+venv/

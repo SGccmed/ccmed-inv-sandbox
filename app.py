@@ -1,11 +1,30 @@
-import os,sqlite3,re,sys
-from datetime import datetime, timezone, date
+import os,sqlite3,re,sys,secrets
+from datetime import datetime, timezone, date, timedelta
 from pathlib import Path
-from flask import Flask,request,render_template_string,redirect,url_for,flash,session
+from flask import Flask,request,render_template_string,redirect,url_for,flash,session,g,send_file,abort
 from openpyxl import load_workbook
+from auth import register_auth,ensure_user_schema,create_user,add_user_block,validate_password
 BASE=Path(__file__).resolve().parent
-DB=BASE/'inventory.db'
-app=Flask(__name__);app.secret_key=os.environ.get('CCM_SECRET','local-prototype-only')
+# The database location can be changed with the CCM_DB_PATH environment variable.
+DB=Path(os.environ.get('CCM_DB_PATH') or BASE/'inventory.db')
+def load_secret_key():
+ # Use CCM_SECRET if set; otherwise create a random key once and keep it next to the database.
+ if os.environ.get('CCM_SECRET'):return os.environ['CCM_SECRET']
+ keyfile=DB.parent/'.secret_key'
+ if not keyfile.exists():
+  keyfile.write_text(secrets.token_hex(32),encoding='utf-8')
+  try:os.chmod(keyfile,0o600)
+  except OSError:pass
+ return keyfile.read_text(encoding='utf-8').strip()
+app=Flask(__name__)
+app.secret_key=load_secret_key()
+app.config.update(
+ SESSION_COOKIE_HTTPONLY=True,
+ SESSION_COOKIE_SAMESITE='Lax',
+ # Secure (HTTPS-only) cookies are on by default; running locally with `python app.py` turns them off.
+ SESSION_COOKIE_SECURE=os.environ.get('CCM_SECURE_COOKIES','1')=='1',
+ PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
+ MAX_CONTENT_LENGTH=6*1024*1024)
 SCHEMA='''CREATE TABLE IF NOT EXISTS units(id INTEGER PRIMARY KEY,source_sheet TEXT,source_row INTEGER,manufacturer TEXT,product_raw TEXT,product_key TEXT,serial TEXT,cost REAL,dom TEXT,notes TEXT,location_raw TEXT,physical_location TEXT,status TEXT,condition TEXT,review TEXT, UNIQUE(source_sheet,source_row)); CREATE TABLE IF NOT EXISTS movements(id INTEGER PRIMARY KEY,unit_id INTEGER,old_location TEXT,new_location TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,note TEXT); CREATE TABLE IF NOT EXISTS repair_orders(id INTEGER PRIMARY KEY,unit_id INTEGER,repair_type TEXT,status TEXT DEFAULT 'Open',notes TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP); CREATE TABLE IF NOT EXISTS integration_links(id INTEGER PRIMARY KEY,unit_id INTEGER,system TEXT,external_id TEXT,sync_state TEXT DEFAULT 'not_synced');'''
 def conn():
  c=sqlite3.connect(DB);c.row_factory=sqlite3.Row;return c
@@ -214,10 +233,10 @@ def core_detail(cid):
  total=core['original_cost']+sum(t['labor_cost']+t['parts_cost']+t['other_cost'] for t in tx)
  c.close();return render_template_string(CORE_TEMPLATE,detail=core,transactions=tx,total=total,rows=[])
 
-TEMPLATE=(BASE/'dashboard.html').read_text(encoding='utf-8')
-REPAIR_TEMPLATE=(BASE/'repairs.html').read_text(encoding='utf-8')
-ENTRY_TEMPLATE=(BASE/'inventory_entry.html').read_text(encoding='utf-8')
-CORE_TEMPLATE=(BASE/'cores.html').read_text(encoding='utf-8')
+TEMPLATE=add_user_block((BASE/'dashboard.html').read_text(encoding='utf-8'))
+REPAIR_TEMPLATE=add_user_block((BASE/'repairs.html').read_text(encoding='utf-8'))
+ENTRY_TEMPLATE=add_user_block((BASE/'inventory_entry.html').read_text(encoding='utf-8'))
+CORE_TEMPLATE=add_user_block((BASE/'cores.html').read_text(encoding='utf-8'))
 @app.route('/repairs')
 def repairs():
  c=conn();c.executescript(REPAIR_SCHEMA)
@@ -275,7 +294,7 @@ def repair_update(rid):
 
 @app.route('/')
 def index():
- view=request.args.get('view','Active');q=request.args.get('q','').strip();page=max(1,int(request.args.get('page','1')));c=conn();where=[];params=[]
+ view=request.args.get('view','Active');q=request.args.get('q','').strip();page=max(1,request.args.get('page',1,type=int) or 1);c=conn();where=[];params=[]
  if view=='Active':where.append("status IN ('Active','Rental')")
  elif view!='All':where.append('status=?');params.append(view)
  if q:where.append('(product_raw LIKE ? OR serial LIKE ? OR notes LIKE ? OR location_raw LIKE ?)');params.extend(['%'+q+'%']*4)
@@ -284,25 +303,62 @@ def index():
  return render_template_string(TEMPLATE,view=view,q=q,page=page,total=stats['n'],priced=stats['priced'],value=stats['val'],units=rows,unit=None,overview=overview,all_count=all_count)
 @app.route('/unit/<int:uid>')
 def unit(uid):
- c=conn();u=c.execute('SELECT * FROM units WHERE id=?',(uid,)).fetchone();c.close()
- if not u:return 'Not found',404
- return render_template_string(TEMPLATE,view=u['status'],unit=u,overview={},all_count=0)
+ c=conn();u=c.execute('SELECT * FROM units WHERE id=?',(uid,)).fetchone()
+ if not u:c.close();return 'Not found',404
+ moves=c.execute('SELECT * FROM movements WHERE unit_id=? ORDER BY id DESC',(uid,)).fetchall()
+ unit_repairs=c.execute('SELECT * FROM repair_orders WHERE unit_id=? ORDER BY id DESC',(uid,)).fetchall();c.close()
+ return render_template_string(TEMPLATE,view=u['status'],unit=u,overview={},all_count=0,movements=moves,unit_repairs=unit_repairs)
 @app.post('/transfer/<int:uid>')
 def transfer(uid):
  new=norm(request.form.get('location'));status,physical=classify(new)
  if status!='Active':flash('Transfer requires a recognized physical location');return redirect(url_for('unit',uid=uid))
  c=conn();u=c.execute('SELECT physical_location,status FROM units WHERE id=?',(uid,)).fetchone()
  if not u or u['status']=='Sold archive':c.close();return 'Sold records cannot be transferred',400
- c.execute('INSERT INTO movements(unit_id,old_location,new_location,note) VALUES (?,?,?,?)',(uid,u['physical_location'],physical,request.form.get('note','')));c.execute('UPDATE units SET physical_location=?,status=? WHERE id=?',(physical,'Active',uid));c.commit();c.close();flash('Transfer recorded');return redirect(url_for('unit',uid=uid))
+ c.execute('INSERT INTO movements(unit_id,old_location,new_location,note) VALUES (?,?,?,?)',(uid,u['physical_location'],physical,(request.form.get('note','').strip()+' ['+g.user['username']+']').strip()));c.execute('UPDATE units SET physical_location=?,status=? WHERE id=?',(physical,'Active',uid));c.commit();c.close();flash('Transfer recorded');return redirect(url_for('unit',uid=uid))
 @app.post('/repair/<int:uid>')
 def repair(uid):
  c=conn();u=c.execute('SELECT status FROM units WHERE id=?',(uid,)).fetchone()
  if not u or u['status']=='Sold archive':c.close();return 'Sold records cannot receive new repairs in this prototype',400
- c.execute('INSERT INTO repair_orders(unit_id,repair_type,notes) VALUES (?,?,?)',(uid,request.form.get('type'),request.form.get('notes')));c.commit();c.close();flash('Repair record created');return redirect(url_for('unit',uid=uid))
+ c.execute('INSERT INTO repair_orders(unit_id,repair_type,notes) VALUES (?,?,?)',(uid,request.form.get('type'),(request.form.get('notes','').strip()+' ['+g.user['username']+']').strip()));c.commit();c.close();flash('Repair record created');return redirect(url_for('unit',uid=uid))
+@app.get('/admin/backup')
+def backup_download():
+ # Admins can download a consistent copy of the whole database.
+ if not g.user['is_admin']:abort(403)
+ import tempfile
+ tmp=Path(tempfile.mkdtemp())/('ccmedical-backup-'+datetime.now().strftime('%Y%m%d-%H%M')+'.db')
+ src=conn();dst=sqlite3.connect(tmp);src.backup(dst);dst.close();src.close()
+ return send_file(tmp,as_attachment=True,download_name=tmp.name)
+
 from product_database import register_product_routes
+register_auth(app,conn)
 register_product_routes(app,conn,BASE)
 
+def init_db():
+ c=conn()
+ c.executescript(SCHEMA);c.executescript(REPAIR_SCHEMA);ensure_entry_schema(c);ensure_user_schema(c)
+ c.execute("UPDATE units SET status='Rental' WHERE UPPER(TRIM(location_raw))='RENTAL' AND status='On loan'")
+ c.commit();c.close()
+init_db()
+
+def cli_create_admin(username):
+ import getpass
+ pw=getpass.getpass('Password for '+username+' (at least 10 characters): ')
+ if pw!=getpass.getpass('Repeat password: '):print('Passwords do not match.');return 1
+ c=conn()
+ try:create_user(c,username,pw,is_admin=True);c.commit();print('Admin user created:',username)
+ except ValueError as e:print(e);return 1
+ finally:c.close()
+ return 0
+
 if __name__=='__main__':
- if len(sys.argv)>1 and sys.argv[1]=='import':
+ cmd=sys.argv[1] if len(sys.argv)>1 else ''
+ if cmd=='import':
   print('Imported records, duplicate serial groups:',import_file(sys.argv[2]));sys.exit()
- c=conn();c.executescript(SCHEMA);c.executescript(REPAIR_SCHEMA);ensure_entry_schema(c);c.execute("UPDATE units SET status='Rental' WHERE UPPER(TRIM(location_raw))='RENTAL' AND status='On loan'");c.commit();c.close();app.run(host='127.0.0.1',port=5000,debug=False)
+ if cmd=='create-admin':
+  if len(sys.argv)<3:print('Usage: python app.py create-admin USERNAME');sys.exit(1)
+  sys.exit(cli_create_admin(sys.argv[2]))
+ c=conn();n=c.execute('SELECT COUNT(*) FROM users').fetchone()[0];c.close()
+ if n==0:print('No users yet. Create one first:  python app.py create-admin yourname');sys.exit(1)
+ # Local use over plain http, so turn off HTTPS-only cookies.
+ app.config['SESSION_COOKIE_SECURE']=False
+ app.run(host='127.0.0.1',port=5000,debug=False)
