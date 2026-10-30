@@ -1,0 +1,131 @@
+<!-- Shared page tools. auth.add_user_block() adds this to every page with a sidebar.
+     1. Rich text: any <textarea data-rich> becomes a Trix editor (bold with Ctrl+B, numbered and bulleted lists
+        that continue on Enter). Trix is open source (MIT, 37signals) and served from this app: trix.js / trix.css.
+     2. Money fields: any <input data-money> turns red with a warning if it's negative or not a number, and the
+        form's submit button is greyed out until it's fixed. -->
+<style>
+  input.money-bad {
+    border-color: #c0392b !important;
+    background: #fdecea !important;
+    color: #8e1f15 !important
+  }
+  .money-warn {
+    color: #b3261e;
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 4px
+  }
+  button:disabled,
+  button[disabled] {
+    opacity: .45;
+    cursor: not-allowed
+  }
+  trix-toolbar .trix-button-group--file-tools {
+    display: none !important
+  }
+  trix-editor {
+    min-height: 140px;
+    background: #ffffff;
+    border: 1px solid #cdd9e4 !important;
+    border-radius: 8px !important;
+    padding: 10px 12px !important;
+    line-height: 1.5;
+    color: #182b3c
+  }
+  trix-editor:focus {
+    outline: 2px solid #245d86;
+    outline-offset: 1px
+  }
+  trix-toolbar .trix-button-row {
+    flex-wrap: wrap
+  }
+  trix-editor ol,
+  trix-editor ul {
+    padding-left: 22px
+  }
+</style>
+<script>
+  (function () {
+    // ---- Rich text editors ----
+    function looksLikeHtml(text) {
+      return /<(div|p|br|strong|b|em|i|ol|ul|li|h1|blockquote|pre|del|a)\b/i.test(text);
+    }
+
+    function plainToHtml(text) {
+      return text.split(/\n/).map(function (line) {
+        var safe = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return '<div>' + (safe || '<br>') + '</div>';
+      }).join('');
+    }
+
+    function upgrade(area, n) {
+      var id = 'rich-' + n;
+      var input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = area.name;
+      input.id = id;
+      input.value = looksLikeHtml(area.value) ? area.value : plainToHtml(area.value);
+      if (!area.value.trim()) input.value = '';
+      var editor = document.createElement('trix-editor');
+      editor.setAttribute('input', id);
+      if (area.placeholder) editor.setAttribute('placeholder', area.placeholder);
+      area.parentNode.insertBefore(input, area);
+      area.parentNode.insertBefore(editor, area);
+      area.remove();
+    }
+
+    function loadEditors() {
+      var areas = document.querySelectorAll('textarea[data-rich]');
+      if (!areas.length) return;
+      var css = document.createElement('link');
+      css.rel = 'stylesheet';
+      css.href = '/assets/trix.css';
+      document.head.appendChild(css);
+      var js = document.createElement('script');
+      js.src = '/assets/trix.js';
+      js.onload = function () { areas.forEach(upgrade); };
+      document.head.appendChild(js);
+    }
+    // No file attachments in notes (Trix allows drag-and-drop of files by default).
+    document.addEventListener('trix-file-accept', function (e) { e.preventDefault(); });
+
+    // ---- Money fields ----
+    function moneyProblem(value) {
+      var v = value.trim().replace(/[$,]/g, '');
+      if (!v) return '';
+      if (!/^-?\d*\.?\d*$/.test(v) || v === '.' || v === '-') return 'Enter a number, like 125.50';
+      if (parseFloat(v) < 0) return 'Costs can’t be negative. Remove the minus sign.';
+      return '';
+    }
+
+    function checkForm(form) {
+      var bad = false;
+      form.querySelectorAll('input[data-money]').forEach(function (input) {
+        var problem = moneyProblem(input.value);
+        var warn = input.parentNode.querySelector('.money-warn');
+        input.classList.toggle('money-bad', !!problem);
+        if (problem && !warn) {
+          warn = document.createElement('div');
+          warn.className = 'money-warn';
+          input.insertAdjacentElement('afterend', warn);
+        }
+        if (warn) {
+          warn.textContent = problem;
+          warn.style.display = problem ? 'block' : 'none';
+        }
+        bad = bad || !!problem;
+      });
+      form.querySelectorAll('button:not([type=button])').forEach(function (b) {
+        b.disabled = bad;
+        b.title = bad ? 'Fix the highlighted cost first' : '';
+      });
+    }
+
+    document.addEventListener('input', function (e) {
+      if (e.target.matches && e.target.matches('input[data-money]') && e.target.form) checkForm(e.target.form);
+    });
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadEditors);
+    else loadEditors();
+  })();
+</script>

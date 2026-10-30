@@ -505,18 +505,6 @@
         font-style: italic;
         color: var(--muted)
       }
-      .editor-bar {
-        display: flex;
-        gap: 6px;
-        margin-bottom: 6px
-      }
-      .editor-bar button {
-        background: #e7f0f6;
-        color: #245d86;
-        padding: 5px 10px;
-        font-size: 12px;
-        margin: 0
-      }
       .update-form textarea {
         min-height: 150px;
         line-height: 1.5
@@ -745,23 +733,17 @@
                       </div>
                     </div>
                     <div class="field">
-                      <label>What was done</label>
-                      <div class="editor-bar">
-                        <button type="button" onclick="edPrefix(this, 'numbered')">1. Numbered list</button>
-                        <button type="button" onclick="edPrefix(this, 'bullet')">• Bullets</button>
-                        <button type="button" onclick="edBold(this)"><strong>B</strong> Bold</button>
-                      </div>
-                      <textarea name="body" placeholder="What you checked, what you found, what you replaced, test results.
-Tip: start lines with 1. 2. 3. for steps, or - for bullets."></textarea>
+                      <label>Ticket update</label>
+                      <textarea name="body" data-rich placeholder="What you checked, what you found, what you replaced, test results. Ctrl+B for bold; use the list buttons for steps."></textarea>
                     </div>
                     <div class="row3b">
                       <div class="field">
                         <label>Parts cost ($)</label>
-                        <input name="parts" inputmode="decimal" placeholder="0.00">
+                        <input name="parts" data-money inputmode="decimal" placeholder="0.00">
                       </div>
                       <div class="field">
                         <label>Additional cost ($)</label>
-                        <input name="other" inputmode="decimal" placeholder="0.00">
+                        <input name="other" data-money inputmode="decimal" placeholder="0.00">
                         <div class="hint">Shipping, outside service, etc.</div>
                       </div>
                       <div class="field">
@@ -818,28 +800,5 @@ Tip: start lines with 1. 2. 3. for steps, or - for bullets."></textarea>
         </main>
       </div>
     </div>
-    <script>
-      // Formatting buttons for the update box: they add the same marks you could type yourself.
-      function edBox(btn) {
-        return btn.closest('.field').querySelector('textarea');
-      }
-
-      function edPrefix(btn, kind) {
-        const box = edBox(btn);
-        const start = box.value.lastIndexOf('\n', box.selectionStart - 1) + 1;
-        const end = box.selectionEnd;
-        const lines = box.value.slice(start, end).split('\n');
-        const marked = lines.map((line, i) => (kind === 'numbered' ? (i + 1) + '. ' : '- ') + line.replace(/^(\d+[.)]|[-*•])\s+/, ''));
-        box.setRangeText(marked.join('\n'), start, end, 'end');
-        box.focus();
-      }
-
-      function edBold(btn) {
-        const box = edBox(btn);
-        const text = box.value.slice(box.selectionStart, box.selectionEnd) || 'bold text';
-        box.setRangeText('**' + text + '**', box.selectionStart, box.selectionEnd, 'end');
-        box.focus();
-      }
-    </script>
   </body>
 </html>

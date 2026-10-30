@@ -23,7 +23,9 @@ Every page needs a staff login. Serial numbers are **not** unique keys: a matchi
 |---|---|
 | `app.py` | Main app: stock, receiving, backup/restore, spreadsheet import |
 | `cores.py` | Core repairs: ticket updates, statuses, costs, converting to stock |
-| `formatting.py` | Pacific-time dates ("Oct 30, 2026") and simple formatting in long notes |
+| `formatting.py` | Pacific-time dates ("Oct 30, 2026") and safe display of rich text notes |
+| `page_tools.html` | Added to every page: the rich text editor for notes, and the red warning on negative costs |
+| `trix.js`, `trix.css` | Trix rich text editor (open source, MIT licence, by 37signals), served by the app itself |
 | `repairs.py` | Customer repair tickets: the stages, who can move each one, queues, work log |
 | `search.py` | Search across clients, tickets, stock and cores |
 | `search_box.html` | The search box shown at the top of every sidebar |
@@ -37,7 +39,7 @@ Every page needs a staff login. Serial numbers are **not** unique keys: a matchi
 | `cores.html` | Core list and core page (ticket updates) |
 | `seed_demo.py` | Builds `demo_inventory.db` with fake test data |
 | `wsgi.py` | Starting point Render uses to launch the app |
-| `requirements.txt` | Python packages: Flask, openpyxl, gunicorn, tzdata (time zones) |
+| `requirements.txt` | Python packages: Flask, openpyxl, gunicorn, tzdata (time zones), nh3 (cleans rich text) |
 | `render.yaml` | **Not used yet.** Settings for the future paid Render plan |
 | `.gitignore` | Keeps the database, secrets and spreadsheets out of GitHub |
 
@@ -83,7 +85,7 @@ Each customer repair is a ticket with one owner at each stage, like an IT helpde
 
 ## Core repairs
 
-A core is worked like a ticket. Technicians post **ticket updates**: the day worked on (today by default), an optional time of day, what was done (numbered lists, bullets and **bold** work), parts cost, additional cost, and a status change. Updates are signed with the technician's name automatically; Admins can post on a technician's behalf.
+A core is worked like a ticket. Technicians post **ticket updates**: the day worked on (today by default), an optional time of day, the update itself in a rich text box (bold, numbered and bulleted lists), parts cost, additional cost, and a status change. Updates are signed with the technician's name automatically; Admins can post on a technician's behalf.
 
 | Status | Meaning |
 |---|---|
@@ -95,6 +97,11 @@ A core is worked like a ticket. Technicians post **ticket updates**: the day wor
 | Converted to Stock | An Admin converted it into a CC stock item carrying the full cost |
 
 Technicians can enter costs but never see amounts or totals; the cost summary is for Sales, Admin and SuperAdmin. Cores in the old QC status become In Repair automatically.
+
+## Notes and costs
+
+- **Rich text:** every note and description box (core ticket updates, repair intake notes, eval findings and work-log notes, client notes and activity, product descriptions and requests) is a rich text editor. Ctrl+B / Ctrl+I work, and numbered or bulleted lists continue when you press Enter. Notes are stored as HTML and cleaned of anything unsafe every time they're shown. Older plain-text notes still display normally.
+- **Costs:** a negative or non-numeric cost turns the field red with a warning and greys out the form's submit button until it's fixed. The server also refuses negative costs.
 
 ## Dates
 

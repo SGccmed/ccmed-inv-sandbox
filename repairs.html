@@ -447,8 +447,10 @@
         color: #8696a5;
         margin-right: 6px
       }
-      .log .text {
-        white-space: pre-line
+      .log .text p,
+      .log .text ol,
+      .log .text ul {
+        margin: 2px 0
       }
       .section-title {
         font-size: 12px;
@@ -709,7 +711,7 @@
                   </div>
                   <div class="field wide">
                     <label>Intake notes</label>
-                    <textarea name="notes" rows="3" placeholder="What the client reported, what came in the box, visible damage, any loaner sent."></textarea>
+                    <textarea name="notes" rows="3" data-rich placeholder="What the client reported, what came in the box, visible damage, any loaner sent."></textarea>
                   </div>
                 </div>
                 <div class="actions">
@@ -873,8 +875,12 @@
                       <div class="section-title">Evaluation</div>
                       <div class="field wide">
                         <label>Eval findings</label>
-                        <textarea name="eval_findings" rows="4" {% if not can('repair_eval') %}readonly{% endif %}
-                          placeholder="What's wrong, what parts it needs, rough labor time. Sales prices the repair from this.">{{r.eval_findings or ''}}</textarea>
+                        {% if can('repair_eval') %}
+                          <textarea name="eval_findings" rows="4" data-rich
+                            placeholder="What's wrong, what parts it needs, rough labor time. Sales prices the repair from this.">{{r.eval_findings|editor_value}}</textarea>
+                        {% else %}
+                          <div class="text">{{r.eval_findings|rich if r.eval_findings else '—'}}</div>
+                        {% endif %}
                       </div>
                       <div class="field wide">
                         <label class="checkline">
@@ -896,7 +902,7 @@
                         <div class="section-title">Quote and billing</div>
                         <div class="field">
                           <label>Quoted price ($)</label>
-                          <input name="quoted_price" value="{{'%.2f'|format(r.quoted_price) if r.quoted_price is not none else ''}}" placeholder="Set by the sales rep" {% if not can('repair_price') %}readonly{% endif %}>
+                          <input name="quoted_price" data-money value="{{'%.2f'|format(r.quoted_price) if r.quoted_price is not none else ''}}" placeholder="Set by the sales rep" {% if not can('repair_price') %}readonly{% endif %}>
                           <div class="hint">What the client is charged. Recording it builds a price history per model.</div>
                         </div>
                         <div class="field">
@@ -921,7 +927,7 @@
 
                       <div class="section-title">Intake notes</div>
                       <div class="field wide">
-                        <div class="text" style="white-space:pre-line">{{r.notes or '—'}}</div>
+                        <div class="text">{{r.notes|rich if r.notes else '—'}}</div>
                         <div class="hint">What came in with the unit. Add anything new as a work-log note instead.</div>
                       </div>
                     </div>
@@ -936,7 +942,7 @@
                 <div class="panel">
                   <h2>Work log</h2>
                   <form method="post" action="/repairs/{{r.id}}/note" style="margin-bottom:12px">
-                    <textarea name="note" rows="2" placeholder="Add a note: a call with the client, a part ordered, carrier and tracking number, partner and their RMA…"></textarea>
+                    <textarea name="note" rows="2" data-rich placeholder="Add a note: a call with the client, a part ordered, carrier and tracking number, partner and their RMA…"></textarea>
                     <div class="actions" style="margin-top:8px"><button>Add note</button></div>
                   </form>
                   <ul class="log">
@@ -948,7 +954,7 @@
                           {% if e.kind=='stage' %}<strong>{{e.old_stage}} → {{e.new_stage}}</strong>
                           {% elif e.kind=='created' %}<strong>Received</strong>{% endif %}
                         </div>
-                        {% if e.text %}<div class="text">{{e.text}}</div>{% endif %}
+                        {% if e.text %}<div class="text">{{e.text|rich}}</div>{% endif %}
                       </li>
                     {% else %}
                       <li class="muted">Nothing logged yet.</li>

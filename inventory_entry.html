@@ -225,7 +225,7 @@
                   </div>
                   <div class="field">
                     <label>Purchase / Core Cost ($)</label>
-                    <input name="cost[]" type="number" step="0.01" min="0" placeholder="0.00">
+                    <input name="cost[]" data-money type="number" step="0.01" min="0" placeholder="0.00">
                   </div>
                   <div class="field">
                     <label>Condition</label>
@@ -343,6 +343,8 @@
           el.required = false
         });
         row.querySelectorAll('select').forEach(el => el.selectedIndex = 0);
+        row.querySelectorAll('.money-warn').forEach(el => el.remove());
+        row.querySelectorAll('.money-bad').forEach(el => el.classList.remove('money-bad'));
         const sa = row.querySelector('.snalert');
         sa.style.display = 'none';
         sa.innerHTML = '';

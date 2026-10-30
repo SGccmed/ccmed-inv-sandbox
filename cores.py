@@ -11,7 +11,7 @@ from pathlib import Path
 from flask import abort, flash, g, redirect, render_template_string, request, url_for
 
 from auth import ADMIN_ROLES, add_user_block, can, roles_of
-from formatting import today_pacific
+from formatting import clean_note, today_pacific
 
 # Status: on hold or not (on-hold statuses don't age), and what to do next.
 STAGES = {
@@ -152,7 +152,7 @@ def register_core_routes(app, conn, base_dir, inventory_code_maker, norm):
             date.fromisoformat(work_date)
         except ValueError as e:
             c.close(); flash(str(e) if 'cost' in str(e) else 'Enter a valid day worked on.'); return back
-        body = f.get('body', '').strip()
+        body = clean_note(f.get('body'))
         status = f.get('status', core['stage'])
         if status not in WORK_STAGES:
             status = core['stage']

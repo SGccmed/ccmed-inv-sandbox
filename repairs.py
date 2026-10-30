@@ -13,6 +13,7 @@ from flask import flash, g, redirect, render_template_string, request, url_for
 
 from auth import ADMIN_ROLES, add_user_block, can, roles_of
 from clients import client_label, resolve_client, serial_matches
+from formatting import clean_note
 
 # ---------------------------------------------------------------------------
 # Stages
@@ -507,7 +508,7 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
         if can('repair_assign') and 'assigned_to' in f:
             changes['assigned_to'] = text('assigned_to') or None
         if can('repair_eval') and 'eval_findings' in f:
-            changes['eval_findings'] = text('eval_findings')
+            changes['eval_findings'] = clean_note(f.get('eval_findings'))
         if can('repair_eval') or can('repair_price'):
             if 'warranty_form' in f:
                 changes['warranty'] = 1 if f.get('warranty') else 0
@@ -545,6 +546,7 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
     @app.post('/repairs/<int:rid>/note')
     def repair_note(rid):
         note = request.form.get('note', '').strip()
+        note = clean_note(note)
         if not note:
             flash('Type a note first.'); return redirect(url_for('repair_detail', rid=rid))
         if not can('rma_edit'):
@@ -594,7 +596,7 @@ def create_ticket(c, client, rma, received, fields, assigned_to='', note='Ticket
                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (rma, client['name'], client['id'], fields.get('manufacturer', ''), fields.get('model', ''),
                      fields.get('part_number', ''), fields.get('serial', ''), fields.get('location', ''), received,
-                     fields.get('notes', ''), assigned_to or None, 'Received', when, when, when, code))
+                     clean_note(fields.get('notes')), assigned_to or None, 'Received', when, when, when, code))
     rid = cur.lastrowid
     log(c, rid, 'created', note, new_stage='Received', when=when)
     return rid

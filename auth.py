@@ -232,14 +232,15 @@ USER_BLOCK = """<div style="margin-top:auto;padding:16px 13px 0;border-top:1px s
 
 
 SEARCH_BOX = (Path(__file__).resolve().parent / "search_box.html").read_text(encoding="utf-8")
+PAGE_TOOLS = (Path(__file__).resolve().parent / "page_tools.html").read_text(encoding="utf-8")   # rich text + cost checks
 
 
 def add_user_block(template_html):
-    """Add the search box under the sidebar title and the signed-in user panel at the bottom of the sidebar."""
+    """Add the search box under the sidebar title, the shared page tools, and the signed-in user panel."""
     m = re.search(r"<aside[^>]*>.*?(</h2>|</small></div>)", template_html, re.S)
     if m:
         template_html = template_html[:m.end()] + SEARCH_BOX + template_html[m.end():]
-    return template_html.replace("</aside>", USER_BLOCK + "</aside>", 1)
+    return template_html.replace("</aside>", PAGE_TOOLS + USER_BLOCK + "</aside>", 1)
 
 
 SIMPLE_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">

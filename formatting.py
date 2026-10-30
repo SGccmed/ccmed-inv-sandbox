@@ -3,12 +3,14 @@
 Dates are stored in UTC and shown in Pacific time:
     {{ value|day }}      -> Oct 30, 2026
     {{ value|daytime }}  -> Oct 30, 2026 · 2:15 PM
-Long notes can use simple formatting (see rich()): numbered lists, bullets and **bold**.
+Notes written in the rich text editor are stored as HTML and cleaned (only safe formatting tags kept) every time
+they're shown. Older plain-text notes still show, with "1." lines as numbered lists and **bold**.
 """
 import re
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
+import nh3
 from markupsafe import Markup, escape
 
 PACIFIC = ZoneInfo('America/Los_Angeles')
@@ -66,13 +68,50 @@ def today_pacific():
     return datetime.now(PACIFIC).date()
 
 
+# Formatting the editor can produce. Anything else (scripts, styles, images, event handlers) is removed.
+SAFE_TAGS = {'div', 'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'del', 's', 'ol', 'ul', 'li', 'h1', 'h2', 'h3',
+             'blockquote', 'pre', 'code', 'a'}
+HTML_HINT = re.compile(r'<(div|p|br|strong|b|em|i|u|del|s|ol|ul|li|h[1-3]|blockquote|pre|code|a)\b', re.I)
+
+
+def is_html(text):
+    return bool(HTML_HINT.search(str(text or '')))
+
+
+def clean_html(html):
+    return nh3.clean(str(html or ''), tags=SAFE_TAGS, attributes={'a': {'href'}}, url_schemes={'http', 'https', 'mailto'},
+                     link_rel='noopener noreferrer')
+
+
+def has_text(value):
+    """True if a note has any visible text (an editor can send back empty tags)."""
+    return bool(re.sub(r'<[^>]+>|&nbsp;|\s', '', str(value or '')))
+
+
+def clean_note(value):
+    """What to store from a note field: '' if empty, cleaned HTML from the editor, or plain text as typed."""
+    value = str(value or '').strip()
+    if not has_text(value):
+        return ''
+    return clean_html(value) if is_html(value) else value
+
+
+def editor_value(text):
+    """What to load into the rich text editor: cleaned HTML, or an older plain note converted to HTML."""
+    if not str(text or '').strip():
+        return ''
+    return clean_html(text) if is_html(text) else str(rich(text))
+
+
 def rich(text):
-    """Show a note with simple formatting, safely (no HTML from the note is ever run).
+    """Show a note with formatting, safely. Editor notes are cleaned HTML; older plain notes are converted.
 
     1. Lines starting "1." "2." ... become a numbered list
     - Lines starting "-" or "*" become bullets
     **words** become bold; blank lines separate paragraphs.
     """
+    if is_html(text):
+        return Markup('<div class="rich">' + clean_html(text) + '</div>')
     out, kind, para = [], None, []
 
     def close():
@@ -114,3 +153,4 @@ def register_formatting(app):
     app.jinja_env.filters['daytime'] = daytime
     app.jinja_env.filters['rich'] = rich
     app.jinja_env.filters['clock'] = clock
+    app.jinja_env.filters['editor_value'] = editor_value
