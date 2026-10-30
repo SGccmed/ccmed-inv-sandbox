@@ -1,0 +1,122 @@
+<!-- Global search box. auth.add_user_block() places it under the "CC Medical" title in every sidebar. -->
+<style>
+  .gsearch {
+    position: relative;
+    margin: 4px 0 14px;
+    padding: 0 4px
+  }
+  .gsearch input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 10px;
+    border: 0;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 13px;
+    background: #ffffff;
+    color: #182b3c
+  }
+  .gsearch .gs-list {
+    display: none;
+    position: absolute;
+    left: 4px;
+    width: min(380px, 90vw);
+    top: 40px;
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
+    z-index: 50;
+    overflow: hidden
+  }
+  .gsearch .gs-list a {
+    display: block;
+    padding: 8px 10px !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    color: #182b3c !important;
+    background: #ffffff !important;
+    text-decoration: none !important;
+    border-bottom: 1px solid #eef2f6;
+    font-weight: 400 !important;
+    font-size: 13px;
+    line-height: 1.35
+  }
+  .gsearch .gs-list a:hover,
+  .gsearch .gs-list a.on {
+    background: #eaf2f9 !important
+  }
+  .gsearch .gs-kind {
+    display: block;
+    font-size: 10px;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    color: #7a8a99
+  }
+  .gsearch .gs-sub {
+    display: block;
+    font-size: 12px;
+    color: #667a8e
+  }
+</style>
+<form class="gsearch" action="/search" method="get" autocomplete="off">
+  <input name="q" type="search" placeholder="Search clients, tickets, serials…" aria-label="Search everything"
+    oninput="gsSuggest(this)" onkeydown="gsKey(event, this)" onblur="setTimeout(function () { gsHide() }, 200)">
+  <div class="gs-list"></div>
+</form>
+<script>
+  // Suggestions as you type: asks /api/search and shows the best matches under the box.
+  // Enter (with nothing highlighted) opens the full search, which jumps straight to a single match.
+  var gsTimer = null;
+
+  function gsEsc(t) {
+    return String(t == null ? '' : t).replace(/[&<>"]/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch];
+    });
+  }
+
+  function gsHide() {
+    document.querySelectorAll('.gsearch .gs-list').forEach(function (l) { l.style.display = 'none'; });
+  }
+
+  function gsSuggest(input) {
+    clearTimeout(gsTimer);
+    var q = input.value.trim();
+    var list = input.parentNode.querySelector('.gs-list');
+    if (q.length < 2) { list.style.display = 'none'; return; }
+    gsTimer = setTimeout(function () {
+      fetch('/api/search?q=' + encodeURIComponent(q))
+        .then(function (r) { return r.json(); })
+        .then(function (hits) {
+          if (input.value.trim() !== q) return;
+          var html = '';
+          hits.forEach(function (h) {
+            html += '<a href="' + gsEsc(h.url) + '"><span class="gs-kind">' + gsEsc(h.kind) + '</span>' +
+              '<strong>' + gsEsc(h.label) + '</strong><span class="gs-sub">' + gsEsc(h.sub) + '</span></a>';
+          });
+          if (!hits.length) html = '<a href="/search?q=' + encodeURIComponent(q) + '"><span class="gs-sub">No quick matches. Press Enter to search everything.</span></a>';
+          else html += '<a href="/search?all=1&q=' + encodeURIComponent(q) + '"><span class="gs-sub">See all results for “' + gsEsc(q) + '” →</span></a>';
+          list.innerHTML = html;
+          list.style.display = 'block';
+        })
+        .catch(function () {});
+    }, 200);
+  }
+
+  function gsKey(e, input) {
+    var list = input.parentNode.querySelector('.gs-list');
+    var items = Array.prototype.slice.call(list.querySelectorAll('a'));
+    var at = items.findIndex(function (a) { return a.classList.contains('on'); });
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (!items.length) return;
+      e.preventDefault();
+      if (at >= 0) items[at].classList.remove('on');
+      at = e.key === 'ArrowDown' ? Math.min(at + 1, items.length - 1) : Math.max(at - 1, 0);
+      items[at].classList.add('on');
+    } else if (e.key === 'Enter' && at >= 0) {
+      e.preventDefault();
+      window.location = items[at].href;
+    } else if (e.key === 'Escape') {
+      list.style.display = 'none';
+    }
+  }
+</script>

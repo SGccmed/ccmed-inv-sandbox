@@ -2,6 +2,7 @@
 
 Every client gets a permanent ID (CL-00001). Repairs link to a client by that ID, so renaming a client never breaks its history.
 """
+import os
 import re
 import sqlite3
 from datetime import datetime, timezone
@@ -69,6 +70,12 @@ def ensure_client_schema(c):
     """Create client tables and link columns. Safe to run on every start and after a restore."""
     c.executescript(SCHEMA)
     add_column(c, 'customer_repairs', 'client_id', 'INTEGER')
+    # One Salesforce account per client (blank allowed). Skipped if an older database already has duplicates.
+    try:
+        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_salesforce ON clients(salesforce_id) "
+                  "WHERE salesforce_id IS NOT NULL AND salesforce_id<>''")
+    except sqlite3.IntegrityError:
+        pass
     # The blue/orange tape feature was removed; drop its columns from databases that have them.
     for table, col in (('units', 'tape'), ('units', 'owner_client_id'), ('core_items', 'tape')):
         if col in {r['name'] for r in c.execute(f'PRAGMA table_info({table})')}:
@@ -81,6 +88,36 @@ def ensure_client_schema(c):
         existing = c.execute('SELECT id FROM clients WHERE name=? COLLATE NOCASE', (r['name'],)).fetchone()
         cid = existing['id'] if existing else create_client(c, r['name'], 'system', notes='Auto-created from existing repair records')
         c.execute('UPDATE customer_repairs SET client_id=? WHERE client_id IS NULL AND TRIM(customer)=? COLLATE NOCASE', (cid, r['name']))
+
+
+# ---------- Salesforce account IDs ----------
+# Salesforce stays the sales system; each client keeps its CL- number and also stores its Salesforce Account ID.
+
+def salesforce_id_problem(sfid):
+    """None if blank or a valid-looking Salesforce ID (15 or 18 letters/digits), otherwise what's wrong."""
+    sfid = clean(sfid)
+    if not sfid:
+        return None
+    if not re.fullmatch(r'[A-Za-z0-9]{15}([A-Za-z0-9]{3})?', sfid):
+        return 'A Salesforce ID is 15 or 18 letters and digits (Account IDs start with 001)'
+    return None
+
+
+def salesforce_url(sfid):
+    """Link to the account in Salesforce, if CCM_SALESFORCE_URL (e.g. https://yourcompany.lightning.force.com) is set."""
+    base = os.environ.get('CCM_SALESFORCE_URL', '').rstrip('/')
+    return f'{base}/lightning/r/Account/{sfid}/view' if base and sfid else ''
+
+
+def salesforce_check(c, sfid, client_id=None):
+    """Error message if the ID is malformed or already on another client."""
+    problem = salesforce_id_problem(sfid)
+    if problem or not clean(sfid):
+        return problem
+    other = c.execute('SELECT client_code, name FROM clients WHERE salesforce_id=? AND id<>?', (clean(sfid), client_id or 0)).fetchone()
+    if other:
+        return f"That Salesforce ID is already on {other['client_code']} · {other['name']}"
+    return None
 
 
 def client_label(row):
@@ -159,16 +196,16 @@ def page(body, **ctx):
     return render_template_string(LAYOUT, body=render_template_string(body, **ctx))
 
 
-LIST_PAGE = '''<div class="toolbar" style="justify-content:space-between"><div><h1>Clients</h1><div class="muted">Accounts with contacts, activity and full repair / equipment history.</div></div>{% if can('client_edit') %}<a class="btn" href="/clients/new">+ New Client</a>{% endif %}</div>
+LIST_PAGE = '''<div class="toolbar" style="justify-content:space-between"><div><h1>Clients</h1><div class="muted">Accounts with contacts, activity and full repair / equipment history.</div></div><div style="display:flex;gap:8px">{% if can('client_import') %}<a class="btn secondary" href="/clients/salesforce">Link to Salesforce</a>{% endif %}{% if can('client_edit') %}<a class="btn" href="/clients/new">+ New Client</a>{% endif %}</div></div>
 <div class="cards"><div class="card"><span>Total clients</span><strong>{{stats.total}}</strong></div><div class="card"><span>Active</span><strong>{{stats.active}}</strong></div><div class="card"><span>Prospects</span><strong>{{stats.prospect}}</strong></div><div class="card"><span>Clients with open repairs</span><strong>{{stats.open_clients}}</strong></div><div class="card"><span>Open RMAs</span><strong>{{stats.open_rmas}}</strong></div></div>
-<section><form class="toolbar"><div style="flex:1;min-width:240px"><label>Search</label><input name="q" value="{{q}}" placeholder="Name, client ID, phone, email, contact…"></div>
+<section><form class="toolbar"><div style="flex:1;min-width:240px"><label>Search</label><input name="q" value="{{q}}" placeholder="Name, CL- number, Salesforce ID, phone, email, contact…"></div>
 <div><label>Type</label><select name="type"><option value="">All types</option>{% for t in types %}<option {% if t==type %}selected{% endif %}>{{t}}</option>{% endfor %}</select></div>
 <div><label>Status</label><select name="status"><option value="">All statuses</option>{% for s in statuses %}<option {% if s==status %}selected{% endif %}>{{s}}</option>{% endfor %}</select></div>
 <div><label>Account owner</label><select name="owner"><option value="">Anyone</option>{% for o in owners %}<option {% if o==owner %}selected{% endif %}>{{o}}</option>{% endfor %}</select></div>
 <button>Filter</button><a class="btn secondary" href="/clients">Clear</a></form></section>
-<section><div style="overflow:auto"><table><tr><th>Client ID</th><th>Name</th><th>Type</th><th>Status</th><th>Primary contact</th><th>Phone</th><th>Account owner</th><th>Open RMAs</th><th>Total RMAs</th><th>Last activity</th></tr>
-{% for r in rows %}<tr><td>{{r.client_code}}</td><td><a href="/clients/{{r.id}}"><strong>{{r.name}}</strong></a></td><td>{{r.account_type or ''}}</td><td><span class="pill {{r.status}}">{{r.status}}</span></td><td>{{r.contact or '—'}}</td><td class="nw">{{r.phone or ''}}</td><td>{{r.account_owner or ''}}</td><td>{{r.open_rmas}}</td><td>{{r.total_rmas}}</td><td class="nw">{{(r.last_activity or '')[:10]}}</td></tr>
-{% else %}<tr><td colspan="10">No clients match.</td></tr>{% endfor %}</table></div><p class="muted">{{rows|length}} shown</p></section>'''
+<section><div style="overflow:auto"><table><tr><th>Client ID</th><th>Name</th><th>Type</th><th>Status</th><th>Primary contact</th><th>Phone</th><th>Account owner</th><th>Salesforce</th><th>Open RMAs</th><th>Total RMAs</th><th>Last activity</th></tr>
+{% for r in rows %}<tr><td>{{r.client_code}}</td><td><a href="/clients/{{r.id}}"><strong>{{r.name}}</strong></a></td><td>{{r.account_type or ''}}</td><td><span class="pill {{r.status}}">{{r.status}}</span></td><td>{{r.contact or '—'}}</td><td class="nw">{{r.phone or ''}}</td><td>{{r.account_owner or ''}}</td><td>{{'Linked' if r.salesforce_id else '—'}}</td><td>{{r.open_rmas}}</td><td>{{r.total_rmas}}</td><td class="nw">{{(r.last_activity or '')[:10]}}</td></tr>
+{% else %}<tr><td colspan="11">No clients match.</td></tr>{% endfor %}</table></div><p class="muted">{{rows|length}} shown</p></section>'''
 
 FORM_PAGE = '''<p><a href="{{'/clients/'~c.id if c else '/clients'}}">← {{'Back to '~c.name if c else 'Clients'}}</a></p><h1>{{'Edit '~c.name if c else 'New Client'}}</h1>
 <form method="post"><section><h2>Account</h2><div class="grid">
@@ -184,7 +221,7 @@ FORM_PAGE = '''<p><a href="{{'/clients/'~c.id if c else '/clients'}}">← {{'Bac
 <label style="margin-top:12px"><input type="checkbox" name="tax_exempt" value="1" style="width:auto" {% if c and c.tax_exempt %}checked{% endif %}> Tax exempt</label></div>
 </div></section>
 {% if not c %}<section><h2>Primary contact</h2><div class="grid"><div><label>Name</label><input name="contact_name"></div><div><label>Title</label><input name="contact_title" placeholder="Biomed manager"></div><div></div><div><label>Phone</label><input name="contact_phone"></div><div><label>Email</label><input name="contact_email" type="email"></div></div></section>{% endif %}
-<section><h2>Other</h2><div class="grid"><div><label>QuickBooks customer ID</label><input name="quickbooks_id" value="{{c.quickbooks_id or '' if c else ''}}" placeholder="For future sync"></div><div><label>Salesforce account ID</label><input name="salesforce_id" value="{{c.salesforce_id or '' if c else ''}}" placeholder="For future sync"></div><div></div>
+<section><h2>Other</h2><div class="grid"><div><label>QuickBooks customer ID</label><input name="quickbooks_id" value="{{c.quickbooks_id or '' if c else ''}}" placeholder="For future sync"></div><div><label>Salesforce account ID</label><input name="salesforce_id" value="{{c.salesforce_id or '' if c else ''}}" placeholder="15 or 18 characters, starts with 001"><div class="muted" style="font-size:12px">From the account's page in Salesforce. Links this client to Salesforce; our CL- number stays the same.</div></div><div></div>
 <div class="wide"><label>Notes</label><textarea name="notes" rows="3">{{c.notes or '' if c else ''}}</textarea></div></div></section>
 <button>{{'Save changes' if c else 'Create client'}}</button></form>'''
 
@@ -197,7 +234,7 @@ DETAIL_PAGE = '''<p><a href="/clients">← Clients</a></p>
 <div class="tab on" id="t-overview"><section><div class="grid"><div class="wide" style="grid-column:span 2"><dl>
 <dt>Main phone</dt><dd>{{c.phone or '—'}}</dd><dt>Main email</dt><dd>{% if c.email %}<a href="mailto:{{c.email}}">{{c.email}}</a>{% else %}—{% endif %}</dd><dt>Website</dt><dd>{{c.website or '—'}}</dd>
 <dt>Billing address</dt><dd>{{c.billing_address or '—'}}</dd><dt>Shipping address</dt><dd>{{c.shipping_address or '—'}}</dd><dt>Payment terms</dt><dd>{{c.payment_terms or '—'}}{% if c.tax_exempt %} · Tax exempt{% endif %}</dd>
-<dt>QuickBooks ID</dt><dd>{{c.quickbooks_id or 'Not linked'}}</dd><dt>Salesforce ID</dt><dd>{{c.salesforce_id or 'Not linked'}}</dd><dt>Notes</dt><dd>{{c.notes or '—'}}</dd></dl></div>
+<dt>QuickBooks ID</dt><dd>{{c.quickbooks_id or 'Not linked'}}</dd><dt>Salesforce ID</dt><dd>{% if c.salesforce_id %}{{c.salesforce_id}}{% if sf_url %} · <a href="{{sf_url}}" target="_blank">Open in Salesforce</a>{% endif %}{% else %}Not linked{% endif %}</dd><dt>Notes</dt><dd>{{c.notes or '—'}}</dd></dl></div>
 <div><h2>Primary contact</h2>{% if primary %}<p><strong>{{primary.name}}</strong><br>{{primary.title or ''}}<br>{{primary.phone or ''}}<br>{% if primary.email %}<a href="mailto:{{primary.email}}">{{primary.email}}</a>{% endif %}</p>{% else %}<p class="muted">None set.</p>{% endif %}
 {% if can('client_edit') %}<h2 style="margin-top:18px">Log activity</h2><form method="post" action="/clients/{{c.id}}/activity"><select name="kind">{% for k in kinds %}<option>{{k}}</option>{% endfor %}</select><input name="subject" placeholder="Subject" required style="margin-top:8px"><textarea name="details" rows="3" placeholder="Details" style="margin-top:8px"></textarea><button style="margin-top:8px">Save activity</button></form>{% endif %}</div></div></section>
 <section><h2>Recent activity</h2><div class="tl">{% for e in timeline[:6] %}<div class="ev {{e.cat}}"><strong>{{e.title}}</strong> <span class="muted">· {{e.when[:16]|replace('T',' ')}}{% if e.actor %} · {{e.actor}}{% endif %}</span>{% if e.detail %}<div>{{e.detail}}</div>{% endif %}</div>{% else %}<p class="muted">No activity yet.</p>{% endfor %}</div><a href="#history">See full history →</a></section></div>
@@ -258,8 +295,8 @@ def register_client_routes(app, conn):
         q, typ, status, owner = (clean(request.args.get(k)) for k in ('q', 'type', 'status', 'owner'))
         where, args = [], []
         if q:
-            where.append("(c.name LIKE ? OR c.client_code LIKE ? OR c.phone LIKE ? OR c.email LIKE ? OR EXISTS (SELECT 1 FROM client_contacts p WHERE p.client_id=c.id AND (p.name LIKE ? OR p.email LIKE ? OR p.phone LIKE ?)))")
-            args += ['%' + q + '%'] * 7
+            where.append("(c.name LIKE ? OR c.client_code LIKE ? OR c.salesforce_id LIKE ? OR c.phone LIKE ? OR c.email LIKE ? OR EXISTS (SELECT 1 FROM client_contacts p WHERE p.client_id=c.id AND (p.name LIKE ? OR p.email LIKE ? OR p.phone LIKE ?)))")
+            args += ['%' + q + '%'] * 8
         if typ:
             where.append('c.account_type=?'); args.append(typ)
         if status:
@@ -287,6 +324,9 @@ def register_client_routes(app, conn):
             if not vals['name']:
                 flash('Client name is required.'); return redirect('/clients/new')
             c = conn()
+            problem = salesforce_check(c, vals['salesforce_id'])
+            if problem:
+                c.close(); flash(problem); return redirect('/clients/new')
             dup = c.execute('SELECT id,client_code FROM clients WHERE name=? COLLATE NOCASE', (vals['name'],)).fetchone()
             if dup and request.form.get('allow_duplicate') != '1':
                 c.close()
@@ -316,6 +356,9 @@ def register_client_routes(app, conn):
             vals = client_form_values(request.form)
             if not vals['name']:
                 c.close(); flash('Client name is required.'); return redirect(f'/clients/{cid}/edit')
+            problem = salesforce_check(c, vals['salesforce_id'], cid)
+            if problem:
+                c.close(); flash(problem); return redirect(f'/clients/{cid}/edit')
             changed = [k for k in CLIENT_FIELDS if str(old[k] if old[k] is not None else '') != str(vals[k])]
             if changed:
                 c.execute(f"UPDATE clients SET {','.join(k + '=?' for k in CLIENT_FIELDS)},updated_at=? WHERE id=?",
@@ -392,5 +435,5 @@ def register_client_routes(app, conn):
             avg = round(sum(max(0, (datetime.fromisoformat(r['completed_at']).date() - date.fromisoformat(r['received_date'])).days) for r in done) / len(done), 1)
         kpi = {'open': sum(1 for r in repairs if r['stage'] != 'Closed'), 'total': len(repairs), 'avg_days': avg}
         c.close()
-        return page(DETAIL_PAGE, c=cl, contacts=contacts, primary=contacts[0] if contacts and contacts[0]['is_primary'] else None,
+        return page(DETAIL_PAGE, c=cl, sf_url=salesforce_url(cl['salesforce_id']), contacts=contacts, primary=contacts[0] if contacts and contacts[0]['is_primary'] else None,
                     repairs=repairs, timeline=timeline, kpi=kpi, kinds=ACTIVITY_KINDS)

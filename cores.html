@@ -106,6 +106,12 @@
           padding: 16px
         }
       }
+      .notice {
+        background: #e8f1f8;
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 16px
+      }
       .notice.warn {
         background: #fff4dc;
         border: 1px solid #f0d49b
@@ -139,6 +145,11 @@
         <a href="/repairs">Customer Repairs (RP)</a>
       </aside>
       <main>
+        {% with messages=get_flashed_messages() %}
+          {% for m in messages %}
+            <div class="notice {% if m.startswith('⚠') %}warn{% endif %}">{{m}}</div>
+          {% endfor %}
+        {% endwith %}
         {% if not detail %}
           <h1>Core Repairs</h1>
           <p class="muted">Internal cores are separate from active sellable inventory.</p>

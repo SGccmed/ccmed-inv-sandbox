@@ -23,6 +23,9 @@ Every page needs a staff login. Serial numbers are **not** unique keys: a matchi
 |---|---|
 | `app.py` | Main app: stock, receiving, cores, backup/restore, spreadsheet import |
 | `repairs.py` | Customer repair tickets: the stages, who can move each one, queues, work log |
+| `search.py` | Search across clients, tickets, stock and cores |
+| `search_box.html` | The search box shown at the top of every sidebar |
+| `salesforce.py` | Linking clients to their Salesforce Account IDs (CSV import) |
 | `auth.py` | Logins, roles and permissions (`PERMISSIONS`), the Users page, loading accounts from `users.env` |
 | `clients.py` | Clients pages (their HTML is inside this file) |
 | `product_database.py` | Product Database pages (their HTML is inside this file) |
@@ -41,7 +44,7 @@ Every page needs a staff login. Serial numbers are **not** unique keys: a matchi
 Each account has one or more roles. The full rules are in `PERMISSIONS` in `auth.py` and are checked on the server for every action.
 
 - **SuperAdmin**: everything, plus Admin accounts, database backup and restore.
-- **Admin**: all inventory, clients, catalog and settings. Manages Sales, Shipping and Technician accounts.
+- **Admin**: all inventory, clients, catalog and settings, linking clients to Salesforce. Manages Sales, Shipping and Technician accounts.
 - **Sales**: clients, repair tickets, repair pricing and approvals, inventory lookups and purchase costs.
 - **Shipping**: receiving, shelf moves, repair tickets, and shipping repairs back (Ready to Ship to Shipped).
 - **Technician**: repair evaluation and repair work, core labor/parts/QC, shelf moves. No costs or prices.
@@ -75,6 +78,24 @@ Each customer repair is a ticket with one owner at each stage, like an IT helpde
 - **Closed tickets** record a resolution: Repaired, Warranty, Declined, Exchanged, or Returned unrepaired.
 - **My tickets** shows repairs assigned to you plus repairs for clients you own as sales rep. The Sales rep and Assigned tech filters show anyone else's.
 - Databases from before v1.05 are upgraded automatically: Open Repairs becomes Received, Evaled becomes Eval Complete, QC becomes In Repair, Completed becomes Closed.
+
+## Search
+
+The box at the top of every sidebar searches clients (name, CL- number, Salesforce ID, phone, email), repair tickets (ticket, RMA, serial, client, model), stock and cores. Serials match with or without spaces.
+
+- **Suggestions** appear as you type; use the arrow keys and Enter, or click one.
+- **Enter** with nothing highlighted runs the full search. If only one record matches, or one matches exactly (a full ticket number, serial or CL- number), it opens that record directly with a note saying so.
+- **Several matches** (for example "San Diego") open a results page grouped into clients, repair tickets, stock and cores. "See all results" at the bottom of the suggestions always shows that page.
+- Technicians don't see clients in search, matching their other permissions.
+
+## Clients and Salesforce
+
+Salesforce stays the system for clients, contacts and tasks; this app owns inventory and repairs. Each client keeps its own CL- number and also stores its **Salesforce Account ID** (15 or 18 letters and digits, starting with 001). The ID must be unique per client.
+
+- **One at a time:** Clients → open a client → Edit → *Salesforce account ID*.
+- **In bulk (Admins):** Clients → **Link to Salesforce** (also in Product Database → Admin Mode). Upload a Salesforce report exported as CSV with **Account Name** and **Account ID** columns. The preview shows which clients will be linked, which are already linked, IDs that would change, names with no match, and bad rows. Nothing is saved until you click *Link selected clients*. Each link is recorded in the client's history.
+- **Open in Salesforce:** set `CCM_SALESFORCE_URL` (for example `https://yourcompany.lightning.force.com`) and each linked client page gets an *Open in Salesforce* link.
+- Keep real client lists off the free sandbox. The demo data has fake IDs (`001DM…`), and `salesforce_demo_export.csv` is a fake export for testing the import.
 
 ## How the live site works (Render free plan)
 
@@ -162,6 +183,7 @@ A SuperAdmin can download the whole database from **Product Database → Admin M
 | `CCM_DB_PATH` | Where the database file lives (default: `inventory.db` next to `app.py`) |
 | `CCM_USERS_FILE` | Where to find `users.env` (default: `/etc/secrets/users.env`) |
 | `CCM_INITIAL_ADMIN_USER` / `CCM_INITIAL_ADMIN_PASSWORD` | Creates a first SuperAdmin when the site has no users |
+| `CCM_SALESFORCE_URL` | Your Salesforce address, e.g. `https://yourcompany.lightning.force.com`; adds *Open in Salesforce* links on client pages |
 | `CCM_SECURE_COOKIES` | `1` (default) sends login cookies only over HTTPS. `python app.py` turns this off for local use |
 
 ## What stays off GitHub

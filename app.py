@@ -323,6 +323,9 @@ register_auth(app,conn)
 register_product_routes(app,conn,BASE)
 register_client_routes(app,conn)
 R.register_repair_routes(app,conn,BASE,new_inventory_code)
+import search, salesforce  # search box and results (search.py); Salesforce ID matching (salesforce.py)
+search.register_search_routes(app,conn)
+salesforce.register_salesforce_routes(app,conn)
 
 def init_db():
  c=conn()

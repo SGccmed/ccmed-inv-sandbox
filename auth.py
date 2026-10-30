@@ -6,9 +6,11 @@ each role may do, and every protected route is checked on the server. Passwords 
 in plain text.
 """
 import os
+import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+from pathlib import Path
 from urllib.parse import urlparse
 
 from flask import (abort, flash, g, redirect, render_template_string, request,
@@ -68,6 +70,7 @@ PERMISSIONS = {
     "unit_repair":    {_SA, _A, _T},          # internal repair record on a stock item
     "client_view":    {_SA, _A, _S, _SH},
     "client_edit":    {_SA, _A, _S},
+    "client_import":  {_SA, _A},              # link clients to Salesforce IDs from a CSV
     "rma_create":     {_SA, _A, _S, _SH},
     "rma_edit":       {_SA, _A, _S, _SH, _T}, # edit ticket details and add work-log notes
     # Repair tickets (repairs.py). Who may MOVE a ticket depends on whose turn it is: see STAGES in repairs.py.
@@ -228,8 +231,14 @@ USER_BLOCK = """<div style="margin-top:auto;padding:16px 13px 0;border-top:1px s
 </div>"""
 
 
+SEARCH_BOX = (Path(__file__).resolve().parent / "search_box.html").read_text(encoding="utf-8")
+
+
 def add_user_block(template_html):
-    """Insert the signed-in user panel at the bottom of a page's sidebar."""
+    """Add the search box under the sidebar title and the signed-in user panel at the bottom of the sidebar."""
+    m = re.search(r"<aside[^>]*>.*?(</h2>|</small></div>)", template_html, re.S)
+    if m:
+        template_html = template_html[:m.end()] + SEARCH_BOX + template_html[m.end():]
     return template_html.replace("</aside>", USER_BLOCK + "</aside>", 1)
 
 

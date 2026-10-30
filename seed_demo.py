@@ -226,6 +226,8 @@ for i, (name, (typ, status, terms, owner)) in enumerate(CLIENT_INFO.items(), sta
         addr, addr if rnd.random() < 0.6 else addr.replace('Suite', 'Receiving Dock'), terms, 1 if typ == 'Hospital' else 0, owner,
         'DEMO client: fake contact details.', ts(age), ts(age))).lastrowid
     c.execute('UPDATE clients SET client_code=? WHERE id=?', (f'CL-{cid:05d}', cid)); client_ids[name] = cid
+    if status != 'Prospect':     # fake Salesforce Account IDs (prospects are left unlinked to show the CSV import)
+        c.execute('UPDATE clients SET salesforce_id=? WHERE id=?', (f'001DM{cid:010d}AAA', cid))
     c.execute('INSERT INTO client_activity(client_id,kind,subject,details,actor,created_at) VALUES (?,?,?,?,?,?)', (cid, 'System', 'Client created', f'Client record created for {name}', owner, ts(age)))
     for k in range(rnd.randint(1, 3)):
         nm = f'{rnd.choice(FIRST)} {rnd.choice(LAST)}'
