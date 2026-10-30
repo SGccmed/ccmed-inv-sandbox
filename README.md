@@ -9,7 +9,7 @@ Internal web app for tracking CC Medical's ultrasound equipment: stock, cores, c
 | Area | What it tracks | ID format |
 |---|---|---|
 | Stock (CC) | Units we own: shelf location, cost, status | `CC-MMDDYY-###` |
-| Cores (CR) | Broken units we're fixing to sell; converts to stock after QC | `CR-MMDDYY-###` |
+| Cores (CR) | Broken units we're fixing to sell, worked through ticket updates; converts to stock when ready | `CR-MMDDYY-###` |
 | Customer repairs (RP) | Repair tickets for customer units, run like a helpdesk: 14 stages, team queues, work log | `RP-MMDDYY-###` + RMA # |
 | Clients | Customer accounts, contacts, activity log, repair history | `CL-00001` |
 | Product Database | Master list of systems, probes and parts | — |
@@ -21,7 +21,9 @@ Every page needs a staff login. Serial numbers are **not** unique keys: a matchi
 
 | File | What it does |
 |---|---|
-| `app.py` | Main app: stock, receiving, cores, backup/restore, spreadsheet import |
+| `app.py` | Main app: stock, receiving, backup/restore, spreadsheet import |
+| `cores.py` | Core repairs: ticket updates, statuses, costs, converting to stock |
+| `formatting.py` | Pacific-time dates ("Oct 30, 2026") and simple formatting in long notes |
 | `repairs.py` | Customer repair tickets: the stages, who can move each one, queues, work log |
 | `search.py` | Search across clients, tickets, stock and cores |
 | `search_box.html` | The search box shown at the top of every sidebar |
@@ -32,10 +34,10 @@ Every page needs a staff login. Serial numbers are **not** unique keys: a matchi
 | `dashboard.html` | Stock list and single-item page |
 | `inventory_entry.html` | + New Inventory receiving form |
 | `repairs.html` | Repair queue, new ticket and ticket pages |
-| `cores.html` | Core repairs pages |
+| `cores.html` | Core list and core page (ticket updates) |
 | `seed_demo.py` | Builds `demo_inventory.db` with fake test data |
 | `wsgi.py` | Starting point Render uses to launch the app |
-| `requirements.txt` | Python packages: Flask, openpyxl, gunicorn |
+| `requirements.txt` | Python packages: Flask, openpyxl, gunicorn, tzdata (time zones) |
 | `render.yaml` | **Not used yet.** Settings for the future paid Render plan |
 | `.gitignore` | Keeps the database, secrets and spreadsheets out of GitHub |
 
@@ -47,7 +49,7 @@ Each account has one or more roles. The full rules are in `PERMISSIONS` in `auth
 - **Admin**: all inventory, clients, catalog and settings, linking clients to Salesforce. Manages Sales, Shipping and Technician accounts.
 - **Sales**: clients, repair tickets, repair pricing and approvals, inventory lookups and purchase costs.
 - **Shipping**: receiving, shelf moves, repair tickets, and shipping repairs back (Ready to Ship to Shipped).
-- **Technician**: repair evaluation and repair work, core labor/parts/QC, shelf moves. No costs or prices.
+- **Technician**: repair evaluation and repair work, core ticket updates (can enter parts costs but not see totals), shelf moves. No costs or prices.
 
 There is always at least one active SuperAdmin, and nobody can change their own access.
 
@@ -78,6 +80,25 @@ Each customer repair is a ticket with one owner at each stage, like an IT helpde
 - **Closed tickets** record a resolution: Repaired, Warranty, Declined, Exchanged, or Returned unrepaired.
 - **My tickets** shows repairs assigned to you plus repairs for clients you own as sales rep. The Sales rep and Assigned tech filters show anyone else's.
 - Databases from before v1.05 are upgraded automatically: Open Repairs becomes Received, Evaled becomes Eval Complete, QC becomes In Repair, Completed becomes Closed.
+
+## Core repairs
+
+A core is worked like a ticket. Technicians post **ticket updates**: the day worked on (today by default), an optional time of day, what was done (numbered lists, bullets and **bold** work), parts cost, additional cost, and a status change. Updates are signed with the technician's name automatically; Admins can post on a technician's behalf.
+
+| Status | Meaning |
+|---|---|
+| Needs Repair | Waiting for a technician |
+| In Repair | Being worked on |
+| Waiting on Parts | On hold until parts arrive (doesn't age) |
+| On Hold | Paused for another reason, including cores we can't fix right now (doesn't age) |
+| Ready for Stock | Fixed and tested; the update that sets it is the QC sign-off |
+| Converted to Stock | An Admin converted it into a CC stock item carrying the full cost |
+
+Technicians can enter costs but never see amounts or totals; the cost summary is for Sales, Admin and SuperAdmin. Cores in the old QC status become In Repair automatically.
+
+## Dates
+
+Every date is shown in Pacific time as **Oct 30, 2026**; work logs and updates add the time (**Oct 30, 2026 · 2:15 PM**). Dates are stored in UTC.
 
 ## Search
 

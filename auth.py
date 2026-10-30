@@ -278,7 +278,8 @@ ENDPOINT_PERMISSIONS = {
     ("repair", "POST"): "unit_repair",
     ("repair_new", "*"): "rma_create",
     ("repair_update", "POST"): "rma_edit",
-    ("core_detail", "POST"): "core_work",
+    ("core_update", "POST"): "core_work",
+    ("core_convert", "POST"): "core_convert",
     ("backup_download", "*"): "backup",
     ("restore_upload", "*"): "restore",
     ("clients_list", "*"): "client_view",
@@ -502,7 +503,7 @@ def register_auth(app, conn):
 <div style="display:flex;flex-wrap:wrap;gap:4px 14px">{% for r in assignable %}<label style="display:inline-flex;align-items:center;gap:5px;font-weight:400;font-size:13px;margin:0"><input type="checkbox" name="roles" value="{{ r }}" {% if r in urole %}checked{% endif %}>{{ r }}</label>{% endfor %}</div>
 <button class="secondary" style="margin-top:6px;padding:6px 10px">Save</button></form>{% endif %}</td>
 <td>{{ 'Active' if u.active else 'Deactivated' }}</td>
-<td class="muted">{{ (u.last_login_at or 'Never')[:16].replace('T',' ') }}</td>
+<td class="muted">{{ u.last_login_at|daytime if u.last_login_at else 'Never' }}</td>
 <td>{% if u.id == g.user.id %}<span class="muted">This is you</span>{% elif locked %}<span class="muted">SuperAdmin only</span>{% else %}<div class="inline">
 <form method="post" class="inline"><input type="hidden" name="action" value="reset"><input type="hidden" name="user_id" value="{{ u.id }}">
 <input type="password" name="password" placeholder="New password" minlength="{{ n }}" required autocomplete="new-password"><button class="secondary">Reset password</button></form>

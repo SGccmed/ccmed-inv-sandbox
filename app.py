@@ -183,57 +183,8 @@ def inventory_new():
  for a in alerts:flash('⚠ Serial number alert: '+a)
  return redirect(url_for('inventory_new'))
 
-@app.route('/cores')
-def cores():
- c=conn();ensure_entry_schema(c)
- rows=c.execute("""SELECT c.*,COALESCE((SELECT SUM(labor_cost+parts_cost+other_cost) FROM core_transactions WHERE core_id=c.id),0) repair_cost FROM core_items c ORDER BY c.id DESC""").fetchall();c.close()
- return render_template_string(CORE_TEMPLATE,rows=rows,detail=None,transactions=[],total=0)
-
-@app.route('/cores/<int:cid>',methods=['GET','POST'])
-def core_detail(cid):
- c=conn();ensure_entry_schema(c);core=c.execute('SELECT * FROM core_items WHERE id=?',(cid,)).fetchone()
- if core is None:c.close();return 'Core not found',404
- if request.method=='POST':
-  f=request.form;action=f.get('action','')
-  try:
-   c.execute('BEGIN IMMEDIATE')
-   if core['stage']=='Converted to Stock':raise ValueError('Converted cores cannot be modified')
-   if action=='transaction':
-    method=f.get('labor_method','manual');hours=amount(f.get('hours'),'Hours');rate=amount(f.get('rate'),'Hourly rate')
-    labor=amount(f.get('labor'),'Labor cost') if method=='manual' else round(hours*rate,2)
-    parts=amount(f.get('parts'),'Parts cost');other=amount(f.get('other'),'Other cost')
-    if not f.get('description','').strip():raise ValueError('Transaction description required')
-    c.execute("""INSERT INTO core_transactions(core_id,performed_at,technician,description,labor_method,labor_hours,labor_rate,labor_cost,parts_cost,other_cost) VALUES (?,?,?,?,?,?,?,?,?,?)""",(cid,now_iso(),f.get('technician','').strip(),f['description'].strip(),method,hours,rate,labor,parts,other))
-   elif action=='stage':
-    stage=f.get('stage')
-    if stage not in ('Needs Repair','In Repair','QC'):raise ValueError('Invalid stage change')
-    c.execute('UPDATE core_items SET stage=?,qc_result=NULL WHERE id=?',(stage,cid))
-   elif action=='qc':
-    result=f.get('result');tech=f.get('technician','').strip()
-    if core['stage']!='QC':raise ValueError('Move the core to QC first')
-    if result not in ('Passed','Failed') or not tech:raise ValueError('QC result and technician required')
-    c.execute('UPDATE core_items SET qc_result=?,qc_technician=?,qc_date=?,qc_notes=?,stage=? WHERE id=?',(result,tech,now_iso(),f.get('notes','').strip(),'Ready for Stock' if result=='Passed' else 'In Repair',cid))
-   elif action=='convert':
-    if not can('core_convert'):raise ValueError('Only an Admin can convert a core into stock')
-    if core['stage']!='Ready for Stock' or core['qc_result']!='Passed':raise ValueError('Passing QC is required before conversion')
-    repair_cost=c.execute('SELECT COALESCE(SUM(labor_cost+parts_cost+other_cost),0) FROM core_transactions WHERE core_id=?',(cid,)).fetchone()[0]
-    code=new_inventory_code(c,'CC');total=round(core['original_cost']+repair_cost,2)
-    cur=c.execute("""INSERT INTO units(manufacturer,product_raw,product_key,serial,cost,notes,location_raw,physical_location,status,condition,review,inventory_code,supplier,received_date)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(core['manufacturer'],core['product_raw'],norm(core['product_raw']),core['serial'],total,'Converted from '+core['inventory_code']+'; '+(core['notes'] or ''),core['location'],core['location'],'Active','Refurbished','',code,core['supplier'],date.today().isoformat()))
-    c.execute('UPDATE core_items SET stage=?,converted_unit_id=? WHERE id=?',('Converted to Stock',cur.lastrowid,cid))
-    flash('Converted to '+code+' with total cost $'+format(total,',.2f'))
-   else:raise ValueError('Unknown action')
-   c.commit()
-  except (ValueError,sqlite3.Error) as e:c.rollback();c.close();return str(e),400
-  c.close();return redirect(url_for('core_detail',cid=cid))
- core=c.execute('SELECT * FROM core_items WHERE id=?',(cid,)).fetchone()
- tx=c.execute('SELECT * FROM core_transactions WHERE core_id=? ORDER BY id DESC',(cid,)).fetchall()
- total=core['original_cost']+sum(t['labor_cost']+t['parts_cost']+t['other_cost'] for t in tx)
- c.close();return render_template_string(CORE_TEMPLATE,detail=core,transactions=tx,total=total,rows=[])
-
 TEMPLATE=add_user_block((BASE/'dashboard.html').read_text(encoding='utf-8'))
 ENTRY_TEMPLATE=add_user_block((BASE/'inventory_entry.html').read_text(encoding='utf-8'))
-CORE_TEMPLATE=add_user_block((BASE/'cores.html').read_text(encoding='utf-8'))
 @app.route('/')
 def index():
  view=request.args.get('view','Active');q=request.args.get('q','').strip();page=max(1,request.args.get('page',1,type=int) or 1);c=conn();where=[];params=[]
@@ -324,12 +275,15 @@ register_product_routes(app,conn,BASE)
 register_client_routes(app,conn)
 R.register_repair_routes(app,conn,BASE,new_inventory_code)
 import search, salesforce  # search box and results (search.py); Salesforce ID matching (salesforce.py)
+import cores, formatting  # core repairs and ticket updates (cores.py); Pacific dates and note formatting (formatting.py)
+formatting.register_formatting(app)
+cores.register_core_routes(app,conn,BASE,new_inventory_code,norm)
 search.register_search_routes(app,conn)
 salesforce.register_salesforce_routes(app,conn)
 
 def init_db():
  c=conn()
- c.executescript(SCHEMA);R.ensure_repair_schema(c);ensure_entry_schema(c);ensure_user_schema(c);ensure_client_schema(c)
+ c.executescript(SCHEMA);R.ensure_repair_schema(c);ensure_entry_schema(c);cores.ensure_core_schema(c);ensure_user_schema(c);ensure_client_schema(c)
  c.execute("UPDATE units SET status='Rental' WHERE UPPER(TRIM(location_raw))='RENTAL' AND status='On loan'")
  # On a host without a console, the first admin can come from environment variables.
  # This only runs while there are no users at all.

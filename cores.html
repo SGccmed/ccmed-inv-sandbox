@@ -5,112 +5,279 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>CC Medical | Core Repairs</title>
     <style>
+      :root {
+        --navy: #112a42;
+        --blue: #245d86;
+        --bg: #f3f6fa;
+        --ink: #182b3c;
+        --muted: #697b8d;
+        --line: #dfe7ef
+      }
+      * {
+        box-sizing: border-box
+      }
       body {
         margin: 0;
-        background: #f3f6fa;
-        color: #182b3c;
+        background: var(--bg);
+        color: var(--ink);
         font: 14px/1.5 system-ui, Segoe UI, Arial
+      }
+      a {
+        color: #21628b;
+        text-decoration: none
+      }
+      a:hover {
+        text-decoration: underline
       }
       .shell {
         display: flex;
         min-height: 100vh
       }
-      aside {
+      .sidebar {
         width: 232px;
         flex: none;
-        background: #112a42;
-        color: white;
-        padding: 24px 14px
+        background: var(--navy);
+        padding: 24px 14px;
+        color: #fff
       }
-      aside h2 {
-        padding: 0 12px
+      .brand {
+        font-size: 21px;
+        font-weight: 750;
+        padding: 5px 13px 23px
       }
-      aside a {
+      .brand small {
+        display: block;
+        font-size: 11px;
+        font-weight: 400;
+        letter-spacing: 1px;
+        color: #a5b9cd;
+        text-transform: uppercase
+      }
+      .label {
+        padding: 12px 13px;
+        color: #91a9be;
+        font-size: 11px;
+        letter-spacing: 1px;
+        text-transform: uppercase
+      }
+      .nav {
         display: block;
         color: #dce9f4;
-        text-decoration: none;
         padding: 11px 13px;
-        border-radius: 8px
+        border-radius: 9px
       }
-      aside a.active {
-        background: #2b5f88
+      .nav.active {
+        background: #2b5f88;
+        color: white;
+        font-weight: 700
       }
-      main {
-        padding: 28px 32px;
+      .nav:hover {
+        background: #203d56;
+        text-decoration: none
+      }
+      .main {
         flex: 1;
         min-width: 0
       }
-      .panel {
+      .top {
+        height: 65px;
         background: white;
-        border: 1px solid #dfe7ef;
-        border-radius: 12px;
-        padding: 20px;
-        margin: 18px 0
+        border-bottom: 1px solid var(--line);
+        padding: 20px 32px;
+        font-weight: 650
+      }
+      .content {
+        padding: 28px 32px;
+        max-width: 1500px;
+        margin: auto
+      }
+      .head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 22px;
+        flex-wrap: wrap
+      }
+      h1 {
+        font-size: 27px;
+        margin: 0
+      }
+      h2 {
+        font-size: 17px;
+        margin: 0 0 14px
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 12px
+      }
+      .btn,
+      button {
+        background: var(--blue);
+        color: white;
+        border: 0;
+        border-radius: 8px;
+        padding: 10px 15px;
+        cursor: pointer;
+        font: inherit
+      }
+      .btn:hover {
+        color: white;
+        text-decoration: none
+      }
+      .btn.secondary {
+        background: #e7f0f6;
+        color: #245d86
       }
       .grid {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 12px
+        gap: 13px;
+        margin-bottom: 22px
+      }
+      .card,
+      .panel {
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 19px
+      }
+      .card {
+        display: block;
+        color: var(--ink)
+      }
+      .card:hover {
+        border-color: #82b1d2;
+        text-decoration: none
+      }
+      .card strong {
+        display: block;
+        font-size: 29px
+      }
+      .card span {
+        font-weight: 600
+      }
+      .panel {
+        margin-bottom: 20px
+      }
+      .toolbar {
+        display: flex;
+        gap: 9px;
+        flex-wrap: wrap;
+        margin-bottom: 16px
+      }
+      input,
+      select,
+      textarea {
+        padding: 10px 11px;
+        border: 1px solid #cdd9e4;
+        border-radius: 8px;
+        font: inherit;
+        max-width: 100%;
+        width: 100%
+      }
+      .toolbar input {
+        flex: 1;
+        min-width: 230px
+      }
+      .tablewrap {
+        overflow: auto
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 850px
+      }
+      th,
+      td {
+        border-bottom: 1px solid #eaf0f5;
+        padding: 11px;
+        text-align: left;
+        font-size: 12px
+      }
+      th {
+        background: #f7f9fc;
+        color: #667a8e;
+        text-transform: uppercase;
+        font-size: 11px
+      }
+      .pill {
+        display: inline-block;
+        border-radius: 20px;
+        padding: 4px 9px;
+        background: #edf3f8;
+        color: #3d5c76;
+        white-space: nowrap
+      }
+      .pill.yellow {
+        background: #fff0bc;
+        color: #795500
+      }
+      .pill.red {
+        background: #ffe0df;
+        color: #a42c28
+      }
+      .pill.complete {
+        background: #dcf3e6;
+        color: #236947
+      }
+      .fields {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px
       }
       .field label {
         display: block;
         font-weight: 600;
         font-size: 12px;
-        margin-bottom: 4px
+        margin-bottom: 5px
       }
-      input,
-      select {
-        box-sizing: border-box;
-        width: 100%;
-        padding: 10px;
-        border: 1px solid #cdd9e4;
+      .wide {
+        grid-column: 1/-1
+      }
+      .notice {
+        background: #fff6e5;
+        padding: 12px;
         border-radius: 8px;
-        font: inherit
+        margin-bottom: 16px
       }
-      button {
-        border: 0;
-        background: #245d86;
-        color: white;
-        border-radius: 8px;
-        padding: 10px 15px;
-        cursor: pointer;
-        margin-top: 12px
+      .actions {
+        display: flex;
+        gap: 9px;
+        flex-wrap: wrap;
+        margin-top: 18px
       }
-      table {
-        border-collapse: collapse;
-        width: 100%
-      }
-      td,
-      th {
-        padding: 10px;
-        border-bottom: 1px solid #eaf0f5;
-        text-align: left
-      }
-      a {
-        color: #245d86
-      }
-      .muted {
-        color: #697b8d
+      .foot {
+        color: #7c8d9e;
+        font-size: 11px;
+        margin-top: 20px
       }
       @media(max-width:800px) {
         .shell {
           display: block
         }
-        aside {
-          width: auto
+        .sidebar {
+          width: 100%
+        }
+        .nav {
+          display: inline-block
+        }
+        .top {
+          height: auto;
+          padding: 12px
+        }
+        .content {
+          padding: 18px
         }
         .grid {
+          grid-template-columns: repeat(2, 1fr)
+        }
+        .fields {
           grid-template-columns: 1fr
         }
-        main {
-          padding: 16px
+        .wide {
+          grid-column: auto
         }
-      }
-      .notice {
-        background: #e8f1f8;
-        padding: 12px;
-        border-radius: 8px;
-        margin-bottom: 16px
       }
       .notice.warn {
         background: #fff4dc;
@@ -127,191 +294,552 @@
         margin: 6px 0 0;
         padding-left: 18px
       }
+      /* ---- v1.05: repair tickets ---- */
+      .guide {
+        background: #f4f6f9;
+        border: 1px solid #e1e7ee;
+        border-left: 4px solid #9aabbb;
+        border-radius: 8px;
+        padding: 12px 14px;
+        color: #5d6f80;
+        margin-bottom: 20px
+      }
+      .guide strong {
+        color: #3f5263
+      }
+      .hint {
+        color: #8696a5;
+        font-size: 12px;
+        margin-top: 4px
+      }
+      ::placeholder {
+        color: #a3b0bc
+      }
+      .tabs {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 14px
+      }
+      .tabs a {
+        padding: 8px 13px;
+        border-radius: 8px;
+        background: #e9eff5;
+        color: #3d5c76;
+        font-weight: 600;
+        font-size: 13px
+      }
+      .tabs a.on {
+        background: var(--blue);
+        color: white
+      }
+      .tabs a span {
+        opacity: .75;
+        font-weight: 400;
+        margin-left: 4px
+      }
+      .stagecards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 10px;
+        margin-bottom: 20px
+      }
+      .stagecards a {
+        background: white;
+        border: 1px solid var(--line);
+        border-top: 4px solid #c9d5e0;
+        border-radius: 10px;
+        padding: 10px 12px;
+        color: var(--ink)
+      }
+      .stagecards a:hover {
+        border-color: #82b1d2;
+        text-decoration: none
+      }
+      .stagecards a.on {
+        border-color: var(--blue)
+      }
+      .stagecards strong {
+        display: block;
+        font-size: 22px
+      }
+      .stagecards span {
+        font-size: 12px;
+        font-weight: 600
+      }
+      .stagecards small {
+        display: block;
+        color: var(--muted);
+        font-size: 11px
+      }
+      .team-Repair-team {
+        border-top-color: #5b8fd6 !important
+      }
+      .team-Sales {
+        border-top-color: #e2875a !important
+      }
+      .team-Shipping {
+        border-top-color: #3aa77f !important
+      }
+      .team-Admin {
+        border-top-color: #2d4a73 !important
+      }
+      .tablewrap td:nth-child(-n+2) {
+        white-space: nowrap
+      }
+      .pill.hold {
+        background: #eef0f3;
+        color: #6b7785
+      }
+      .pill.closed {
+        background: #dcf3e6;
+        color: #236947
+      }
+      .pill.team {
+        background: #f3f0ea;
+        color: #6a5a3d
+      }
+      .filters {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr auto;
+        gap: 9px;
+        align-items: end;
+        margin-bottom: 16px
+      }
+      .filters label {
+        display: block;
+        font-weight: 600;
+        font-size: 12px;
+        margin-bottom: 4px
+      }
+      .moves {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center
+      }
+      .moves button {
+        margin: 0
+      }
+      .twocol {
+        display: grid;
+        grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+        gap: 20px;
+        align-items: start
+      }
+      .log {
+        list-style: none;
+        margin: 0;
+        padding: 0
+      }
+      .log li {
+        border-bottom: 1px solid #eef2f6;
+        padding: 9px 0
+      }
+      .log .when {
+        color: var(--muted);
+        font-size: 12px
+      }
+      .log .kind {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+        color: #8696a5;
+        margin-right: 6px
+      }
+      .log .text {
+        white-space: pre-line
+      }
+      .section-title {
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .6px;
+        color: #8696a5;
+        margin: 18px 0 10px;
+        grid-column: 1/-1
+      }
+      .checkline {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-weight: 600;
+        font-size: 13px
+      }
+      .checkline input {
+        width: auto
+      }
+      @media(max-width:900px) {
+        .twocol,
+        .filters {
+          grid-template-columns: 1fr
+        }
+      }
+      /* ---- v1.07: core ticket updates ---- */
+      .update-form .row3 {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr;
+        gap: 12px;
+        margin-bottom: 12px
+      }
+      .update-form .row3b {
+        display: grid;
+        grid-template-columns: 1fr 1fr 2fr;
+        gap: 12px;
+        margin-top: 12px
+      }
+      .update-form .who {
+        font-size: 15px;
+        font-weight: 700;
+        margin-bottom: 12px
+      }
+      .update-form .sign {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 16px;
+        gap: 12px;
+        flex-wrap: wrap
+      }
+      .update-form .sign .name {
+        font-style: italic;
+        color: var(--muted)
+      }
+      .editor-bar {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 6px
+      }
+      .editor-bar button {
+        background: #e7f0f6;
+        color: #245d86;
+        padding: 5px 10px;
+        font-size: 12px;
+        margin: 0
+      }
+      .update-form textarea {
+        min-height: 150px;
+        line-height: 1.5
+      }
+      .updates {
+        list-style: none;
+        margin: 0;
+        padding: 0
+      }
+      .updates > li {
+        border-bottom: 1px solid #eef2f6;
+        padding: 14px 0
+      }
+      .updates .meta {
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 6px
+      }
+      .updates .body p {
+        margin: 0 0 8px
+      }
+      .updates .body ol,
+      .updates .body ul {
+        margin: 0 0 8px;
+        padding-left: 22px
+      }
+      .updates .costs {
+        font-size: 12px;
+        color: #5d6f80;
+        margin-top: 6px
+      }
+      .updates .sig {
+        font-style: italic;
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 4px
+      }
     </style>
   </head>
   <body>
     <div class="shell">
-      <aside>
-        <h2>CC Medical</h2>
-        <a href="/">Inventory Dashboard</a>
+      <aside class="sidebar">
+        <div class="brand">CC Medical<small>Inventory Workspace</small></div>
+        <div class="label">Inventory</div>
         {% if can('receive') %}
-          <a href="/inventory/new">+ New Inventory</a>
+          <a class="nav" href="/inventory/new">+ New Inventory</a>
         {% endif %}
         {% if can('client_view') %}
-          <a href="/clients">Clients</a>
+          <a class="nav" href="/clients">Clients</a>
         {% endif %}
-        <a class="sideitem" href="/products">Product Database</a>
-        <a class="active" href="/cores">Core Repairs (CR)</a>
-        <a href="/repairs">Customer Repairs (RP)</a>
+        <a class="nav" href="/products">Product Database</a>
+        <a class="nav active" href="/cores">Core Repairs (CR)</a>
+        <a class="nav" href="/repairs">Customer Repairs</a>
+        <a class="nav" href="/?view=Active">Active Inventory</a>
+        <a class="nav" href="/?view=All">All Records</a>
       </aside>
-      <main>
-        {% with messages=get_flashed_messages() %}
-          {% for m in messages %}
-            <div class="notice {% if m.startswith('⚠') %}warn{% endif %}">{{m}}</div>
-          {% endfor %}
-        {% endwith %}
-        {% if not detail %}
-          <h1>Core Repairs</h1>
-          <p class="muted">Internal cores are separate from active sellable inventory.</p>
-          <div class="panel">
-            <table>
-              <tr>
-                <th>Inventory ID</th>
-                <th>Product</th>
-                <th>Serial</th>
-                <th>Stage</th>
-                {% if can('view_cost') %}
-                  <th>Accumulated Cost</th>
-                {% endif %}
-              </tr>
-              {% for r in rows %}
-                <tr>
-                  <td><a href="/cores/{{r.id}}">{{r.inventory_code}}</a></td>
-                  <td>{{r.manufacturer}} {{r.product_raw}}</td>
-                  <td>{{r.serial}}</td>
-                  <td>{{r.stage}}</td>
-                  {% if can('view_cost') %}
-                    <td>${{'%.2f'|format(r.original_cost+r.repair_cost)}}</td>
-                  {% endif %}
-                </tr>
-              {% else %}
-                <tr>
-                  <td colspan="{{5 if can('view_cost') else 4}}">No cores yet. Use New Inventory to add CR
-                    items.</td>
-                </tr>
-              {% endfor %}
-            </table>
-          </div>
-        {% else %}
-          <h1>{{detail.inventory_code}} — {{detail.product_raw}}</h1>
-          <p>Stage: <strong>{{detail.stage}}</strong> · QC: {{detail.qc_result or 'Not completed'}} · Serial:
-            {{detail.serial}}</p>
-          {% if can('view_cost') %}
-            <div class="panel">
-              <h2>Cost Summary</h2>
-              <p>Original Core Cost: ${{'%.2f'|format(detail.original_cost)}} · <strong>Total Cost:
-                ${{'%.2f'|format(total)}}</strong></p>
+      <div class="main">
+        <header class="top">Core Repairs / Internal Repairs</header>
+        <main class="content">
+          {% with messages=get_flashed_messages() %}
+            {% for m in messages %}
+              <div class="notice {% if m.startswith('⚠') %}warn{% endif %}">{{m}}</div>
+            {% endfor %}
+          {% endwith %}
+
+          {# ================================================================== #}
+          {#  LIST OF CORES                                                       #}
+          {# ================================================================== #}
+          {% if not detail %}
+            <div class="head">
+              <div>
+                <h1>Core repairs</h1>
+                <div class="muted">Broken units we own and fix to sell. Add new cores on + New Inventory (type CR).</div>
+              </div>
+              {% if can('receive') %}
+                <a class="btn" href="/inventory/new">+ Receive a core</a>
+              {% endif %}
             </div>
-          {% endif %}
-          {% if detail.stage!='Converted to Stock' and can('core_work') %}
+            <div class="stagecards">
+              {% for s in stages %}
+                <a href="/cores?stage={{s|urlencode}}" class="{% if stage==s %}on{% endif %}">
+                  <span>{{s}}</span>
+                  <strong>{{counts.get(s,0)}}</strong>
+                  <small>{% if stages[s].hold %}on hold{% elif s=='Converted to Stock' %}done{% else %}&nbsp;{% endif %}</small>
+                </a>
+              {% endfor %}
+            </div>
             <div class="panel">
-              <h2>Add Repair Transaction</h2>
-              <form method="post">
-                <input type="hidden" name="action" value="transaction">
-                <div class="grid">
-                  <div class="field">
-                    <label>Technician</label>
-                    <input name="technician">
-                  </div>
-                  <div class="field">
-                    <label>Description *</label>
-                    <input name="description" required>
-                  </div>
-                  <div class="field">
-                    <label>Labor Method</label>
-                    <select name="labor_method">
-                    <option value="manual">Manual Total</option>
-                    <option value="hourly">Hours × Rate</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label>Manual Labor Cost ($)</label>
-                    <input name="labor" type="number" min="0" step=".01">
-                  </div>
-                  <div class="field">
-                    <label>Hours</label>
-                    <input name="hours" type="number" min="0" step=".01">
-                  </div>
-                  <div class="field">
-                    <label>Hourly Rate ($)</label>
-                    <input name="rate" type="number" min="0" step=".01">
-                  </div>
-                  <div class="field">
-                    <label>Parts Cost ($)</label>
-                    <input name="parts" type="number" min="0" step=".01">
-                  </div>
-                  <div class="field">
-                    <label>Other Cost ($)</label>
-                    <input name="other" type="number" min="0" step=".01">
+              <h2>
+                {% if stage in stages %}{{stage}}{% elif stage=='all' %}All cores{% else %}Open cores{% endif %}
+                <span class="muted">· {{rows|length}} shown, oldest in status first ·
+                  {% if stage %}<a href="/cores">open only</a>{% else %}<a href="/cores?stage=all">include converted</a>{% endif %}</span>
+              </h2>
+              <div class="tablewrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Core</th>
+                      <th>Product</th>
+                      <th>Serial</th>
+                      <th>Location</th>
+                      <th>Status</th>
+                      <th>In status</th>
+                      <th>Last update</th>
+                      {% if can('view_cost') %}<th>Total cost</th>{% endif %}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in rows %}
+                      <tr>
+                        <td><a href="/cores/{{r.id}}"><strong>{{r.inventory_code}}</strong></a></td>
+                        <td>{{r.product_raw}}</td>
+                        <td>{{r.serial or ''}}</td>
+                        <td>{{r.location or ''}}</td>
+                        <td><span class="pill">{{r.stage}}</span></td>
+                        <td>
+                          {% if r.age=='closed' %}<span class="pill closed">Done</span>
+                          {% elif r.age=='hold' %}<span class="pill hold">On hold · {{r.stage_days}} d</span>
+                          {% else %}<span class="pill {{r.age}}">{{r.stage_days}} d</span>{% endif %}
+                        </td>
+                        <td>{{r.last_update|day if r.last_update else '—'}}</td>
+                        {% if can('view_cost') %}<td>${{'{:,.2f}'.format(r.original_cost + r.repair_cost)}}</td>{% endif %}
+                      </tr>
+                    {% else %}
+                      <tr><td colspan="8">No cores here.</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          {# ================================================================== #}
+          {#  ONE CORE                                                            #}
+          {# ================================================================== #}
+          {% else %}
+            <div class="head">
+              <div>
+                <h1>{{detail.inventory_code}} · {{detail.product_raw}}</h1>
+                <div class="muted">
+                  Serial {{detail.serial or '—'}} · Location {{detail.location or '—'}} · Received {{detail.created_at|day}}
+                  {% if detail.supplier %} · From {{detail.supplier}}{% endif %}
+                </div>
+              </div>
+              <a href="/cores">← Back to cores</a>
+            </div>
+
+            <div class="grid">
+              <div class="card">
+                <span>Status</span>
+                <strong style="font-size:21px">{{detail.stage}}</strong>
+              </div>
+              <div class="card">
+                <span>Days in this status</span>
+                <strong>
+                  {% if detail.age=='closed' %}<span class="pill closed">Done</span>
+                  {% elif detail.age=='hold' %}<span class="pill hold">On hold · {{detail.stage_days}} d</span>
+                  {% else %}<span class="pill {{detail.age}}">{{detail.stage_days}} day{{'' if detail.stage_days==1 else 's'}}</span>{% endif %}
+                </strong>
+              </div>
+              {% if can('view_cost') %}
+                <div class="card">
+                  <span>Cost summary</span>
+                  <strong>${{'{:,.2f}'.format(total)}}</strong>
+                  <div class="muted">
+                    Purchase ${{'{:,.2f}'.format(detail.original_cost)}} · Parts ${{'{:,.2f}'.format(parts)}} · Other ${{'{:,.2f}'.format(other)}}
                   </div>
                 </div>
-                <button>Add Transaction</button>
-              </form>
-            </div>
-            <div class="panel">
-              <h2>Core Workflow</h2>
-              <form method="post">
-                <input type="hidden" name="action" value="stage">
-                <select name="stage">
-                <option>Needs Repair</option>
-                <option>In Repair</option>
-                <option>QC</option>
-                </select><button>Change Stage</button>
-              </form>
-              {% if detail.stage=='QC' %}
-                <h3>QC Approval</h3>
-                <form method="post">
-                  <input type="hidden" name="action" value="qc">
-                  <div class="grid">
-                    <div class="field">
-                      <label>Result *</label>
-                      <select name="result">
-                      <option>Passed</option>
-                      <option>Failed</option>
-                      </select>
-                    </div>
-                    <div class="field">
-                      <label>Technician *</label>
-                      <input name="technician" required>
-                    </div>
-                    <div class="field">
-                      <label>Notes</label>
-                      <input name="notes">
-                    </div>
-                  </div>
-                  <button>Record QC</button>
-                </form>
-              {% endif %}
-              {% if detail.stage=='Ready for Stock' and detail.qc_result=='Passed' and can('core_convert') %}
-                <form method="post" onsubmit="return confirm('Convert this CR core to a new CC stock ID?')">
-                  <input type="hidden" name="action" value="convert">
-                  <button>Convert to CC Stock</button>
-                </form>
-              {% endif %}
-            </div>
-          {% elif detail.stage=='Converted to Stock' %}
-            <div class="panel"><strong>Converted to Stock</strong> · CC unit record
-              <a href="/unit/{{detail.converted_unit_id}}">#{{detail.converted_unit_id}}</a></div>
-          {% endif %}
-          <div class="panel">
-            <h2>Repair Transactions</h2>
-            <table>
-              <tr>
-                <th>Date (UTC)</th>
-                <th>Technician</th>
-                <th>Description</th>
-                <th>Labor</th>
-                <th>Parts</th>
-                <th>Other</th>
-              </tr>
-              {% for t in transactions %}
-                <tr>
-                  <td>{{t.performed_at}}</td>
-                  <td>{{t.technician}}</td>
-                  <td>{{t.description}}</td>
-                  <td>${{'%.2f'|format(t.labor_cost)}}</td>
-                  <td>${{'%.2f'|format(t.parts_cost)}}</td>
-                  <td>${{'%.2f'|format(t.other_cost)}}</td>
-                </tr>
               {% else %}
-                <tr>
-                  <td colspan="6">No repair transactions yet.</td>
-                </tr>
-              {% endfor %}
-            </table>
-          </div>
-        {% endif %}
-      </main>
+                <div class="card">
+                  <span>Updates</span>
+                  <strong>{{updates|length}}</strong>
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="guide">
+              <strong>What happens now ({{detail.stage}}):</strong> {{guide}}
+            </div>
+
+            {% if detail.stage=='Converted to Stock' %}
+              <div class="panel">
+                <strong>Converted to stock</strong> as
+                <a href="/unit/{{detail.converted_unit_id}}">stock item #{{detail.converted_unit_id}}</a>. This core can't be changed.
+              </div>
+            {% else %}
+              {% if detail.stage=='Ready for Stock' and can('core_convert') %}
+                <div class="panel">
+                  <form method="post" action="/cores/{{detail.id}}/convert" onsubmit="return confirm('Convert this core into a new CC stock item?')"
+                    style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+                    <div>
+                      <strong>Ready to convert.</strong>
+                      <span class="muted">Creates a new CC stock item at ${{'{:,.2f}'.format(total)}}, condition Refurbished.</span>
+                    </div>
+                    <button>Convert to CC Stock</button>
+                  </form>
+                </div>
+              {% endif %}
+
+              {% if can('core_work') %}
+                <div class="panel">
+                  <form method="post" action="/cores/{{detail.id}}/update" class="update-form">
+                    <div class="who">Ticket update — <span class="signer">{{me}}</span></div>
+                    <div class="row3">
+                      <div class="field">
+                        {% if is_admin %}
+                          <label>Technician</label>
+                          <select name="technician" onchange="document.querySelectorAll('.signer').forEach(e => e.textContent = this.options[this.selectedIndex].text)">
+                            {% for t in techs %}
+                              <option value="{{t.username}}" {% if t.name==me %}selected{% endif %}>{{t.name}}</option>
+                            {% endfor %}
+                          </select>
+                          <div class="hint">Admins can post on a technician's behalf.</div>
+                        {% else %}
+                          <label>Technician</label>
+                          <input value="{{me}}" readonly>
+                        {% endif %}
+                      </div>
+                      <div class="field">
+                        <label>Day worked on</label>
+                        <input name="work_date" type="date" value="{{today}}" required>
+                      </div>
+                      <div class="field">
+                        <label>Time worked on</label>
+                        <input name="work_time" type="time">
+                        <div class="hint">Optional</div>
+                      </div>
+                    </div>
+                    <div class="field">
+                      <label>What was done</label>
+                      <div class="editor-bar">
+                        <button type="button" onclick="edPrefix(this, 'numbered')">1. Numbered list</button>
+                        <button type="button" onclick="edPrefix(this, 'bullet')">• Bullets</button>
+                        <button type="button" onclick="edBold(this)"><strong>B</strong> Bold</button>
+                      </div>
+                      <textarea name="body" placeholder="What you checked, what you found, what you replaced, test results.
+Tip: start lines with 1. 2. 3. for steps, or - for bullets."></textarea>
+                    </div>
+                    <div class="row3b">
+                      <div class="field">
+                        <label>Parts cost ($)</label>
+                        <input name="parts" inputmode="decimal" placeholder="0.00">
+                      </div>
+                      <div class="field">
+                        <label>Additional cost ($)</label>
+                        <input name="other" inputmode="decimal" placeholder="0.00">
+                        <div class="hint">Shipping, outside service, etc.</div>
+                      </div>
+                      <div class="field">
+                        <label>Status update</label>
+                        <select name="status">
+                          {% for s in work_stages %}
+                            <option {% if s==detail.stage %}selected{% endif %}>{{s}}</option>
+                          {% endfor %}
+                        </select>
+                        <div class="hint">Leave as is to keep the current status. Ready for Stock = fixed and tested.</div>
+                      </div>
+                    </div>
+                    <div class="sign">
+                      <span class="name">— <span class="signer">{{me}}</span></span>
+                      <button>Submit Update</button>
+                    </div>
+                  </form>
+                </div>
+              {% endif %}
+            {% endif %}
+
+            <div class="panel">
+              <h2>Updates <span class="muted">· newest first</span></h2>
+              <ul class="updates">
+                {% for u in updates %}
+                  <li>
+                    <div class="meta">
+                      <strong>{{u.work_date|day if u.work_date else u.performed_at|day}}</strong>{% if u.work_time %} · worked at {{u.work_time|clock}}{% endif %}
+                      · posted {{u.performed_at|daytime}}
+                      {% if u.new_stage %} · <span class="pill">{{u.old_stage}} → {{u.new_stage}}</span>{% endif %}
+                    </div>
+                    {% if u.description %}<div class="body">{{u.description|rich}}</div>{% endif %}
+                    {% if u.parts_cost or u.other_cost or u.labor_cost %}
+                      <div class="costs">
+                        {% if can('view_cost') %}
+                          {% set bits = [] %}
+                          {% if u.parts_cost %}{% set _ = bits.append('Parts $' ~ '{:,.2f}'.format(u.parts_cost)) %}{% endif %}
+                          {% if u.other_cost %}{% set _ = bits.append('Additional $' ~ '{:,.2f}'.format(u.other_cost)) %}{% endif %}
+                          {% if u.labor_cost %}{% set _ = bits.append('Labor $' ~ '{:,.2f}'.format(u.labor_cost)) %}{% endif %}
+                          {{bits|join(' · ')}}
+                        {% else %}
+                          Costs recorded
+                        {% endif %}
+                      </div>
+                    {% endif %}
+                    <div class="sig">— {{u.technician or u.actor or 'unknown'}}</div>
+                  </li>
+                {% else %}
+                  <li class="muted">No updates yet.</li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+        </main>
+      </div>
     </div>
+    <script>
+      // Formatting buttons for the update box: they add the same marks you could type yourself.
+      function edBox(btn) {
+        return btn.closest('.field').querySelector('textarea');
+      }
+
+      function edPrefix(btn, kind) {
+        const box = edBox(btn);
+        const start = box.value.lastIndexOf('\n', box.selectionStart - 1) + 1;
+        const end = box.selectionEnd;
+        const lines = box.value.slice(start, end).split('\n');
+        const marked = lines.map((line, i) => (kind === 'numbered' ? (i + 1) + '. ' : '- ') + line.replace(/^(\d+[.)]|[-*•])\s+/, ''));
+        box.setRangeText(marked.join('\n'), start, end, 'end');
+        box.focus();
+      }
+
+      function edBold(btn) {
+        const box = edBox(btn);
+        const text = box.value.slice(box.selectionStart, box.selectionEnd) || 'bold text';
+        box.setRangeText('**' + text + '**', box.selectionStart, box.selectionEnd, 'end');
+        box.focus();
+      }
+    </script>
   </body>
 </html>

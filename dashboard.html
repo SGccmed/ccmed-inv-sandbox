@@ -549,7 +549,7 @@
                   {% for m in movements %}
                     <p style="margin:0 0 8px"><b>{{m.old_location or '—'}} → {{m.new_location}}</b>
                       <br>
-                      <span class="muted">{{m.created_at}} UTC{% if m.note %} · {{m.note}}{% endif %}</span>
+                      <span class="muted">{{m.created_at|daytime}}{% if m.note %} · {{m.note}}{% endif %}</span>
                     </p>
                   {% else %}
                     <p class="muted">No transfers recorded.</p>
@@ -560,7 +560,7 @@
                   {% for r in unit_repairs %}
                     <p style="margin:0 0 8px"><b>{{r.repair_type}}</b> · {{r.status}}
                       <br>
-                      <span class="muted">{{r.created_at}} UTC{% if r.notes %} · {{r.notes}}{% endif %}</span>
+                      <span class="muted">{{r.created_at|daytime}}{% if r.notes %} · {{r.notes}}{% endif %}</span>
                     </p>
                   {% else %}
                     <p class="muted">No repair records.</p>

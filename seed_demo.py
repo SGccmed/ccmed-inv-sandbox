@@ -184,27 +184,45 @@ for i, (path_name, stop, stage_days) in enumerate(plan, start=1):
     if path_name == 'standard' and stop == 'Closed':
         closed_std.append(rid)
 
-# ---------- Cores (CR) in every stage ----------
-core_plan = ['Needs Repair', 'Needs Repair', 'Needs Repair', 'In Repair', 'In Repair', 'QC', 'Ready for Stock', 'Converted to Stock']
-for i, stage in enumerate(core_plan):
+# ---------- Cores (CR) in every status, worked through ticket updates ----------
+CORE_STEPS = ['In Repair', 'Waiting on Parts', 'In Repair', 'Ready for Stock']
+CORE_NOTES = {
+    'In Repair': '1. Visual check: lens worn, strain relief cracked\n2. Element test: 2 weak elements near the center\n3. Replaced the lens\n\n**Next:** re-test elements',
+    'Waiting on Parts': 'Ordered a replacement strain relief from Demo Parts Co.\n- Expected Tuesday',
+    'Ready for Stock': 'Re-terminated the cable and fitted the new strain relief.\n- Element test: all pass\n- Image test on a demo system: OK',
+}
+core_plan = [('Needs Repair', 0), ('Needs Repair', 0), ('In Repair', 1), ('Waiting on Parts', 2), ('On Hold', 1),
+             ('In Repair', 3), ('Ready for Stock', 4), ('Converted to Stock', 4)]
+for i, (stage, steps) in enumerate(core_plan):
     m, x, cat = rnd.choice([t for t in ALL_MODELS if t[2] == 'PRB'])
-    age = rnd.randint(5, 50); code = new_code('CR', age); orig = float(rnd.randrange(150, 1500, 25))
-    cid = c.execute('INSERT INTO core_items(inventory_code,manufacturer,product_raw,serial,location,supplier,original_cost,stage,notes,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
-        (code, m, f'{m} {x}', serial(), rnd.choice(['C1','C2','C3']), rnd.choice(SUPPLIERS), orig, stage, 'Demo core', ts(age))).lastrowid
-    if stage != 'Needs Repair':
-        for t in range(rnd.randint(1, 3)):
-            hours = rnd.choice([0.5, 1, 1.5, 2, 3]); rate = 65.0
-            c.execute('INSERT INTO core_transactions(core_id,performed_at,technician,description,labor_method,labor_hours,labor_rate,labor_cost,parts_cost,other_cost) VALUES (?,?,?,?,?,?,?,?,?,?)',
-                (cid, ts(age - t - 1), rnd.choice(TECHS), rnd.choice(['Replaced lens', 'Re-terminated cable', 'Element test and repair', 'Housing reseal']),
-                 'hourly', hours, rate, round(hours * rate, 2), float(rnd.randrange(0, 400, 10)), 0.0))
-    if stage in ('Ready for Stock', 'Converted to Stock'):
-        c.execute('UPDATE core_items SET qc_result=?,qc_technician=?,qc_date=?,qc_notes=? WHERE id=?', ('Passed', 'Tech B', ts(2), 'Demo QC pass', cid))
+    age = rnd.randint(12, 50); code = new_code('CR', age); orig = float(rnd.randrange(150, 1500, 25))
+    cid = c.execute('INSERT INTO core_items(inventory_code,manufacturer,product_raw,serial,location,supplier,original_cost,stage,notes,created_at,stage_started_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+        (code, m, f'{m} {x}', serial(), rnd.choice(['C1','C2','C3']), rnd.choice(SUPPLIERS), orig, 'Needs Repair', 'Demo core', ts(age), ts(age))).lastrowid
+    path = CORE_STEPS[:steps] if stage != 'On Hold' else ['On Hold']
+    prev = 'Needs Repair'
+    for k, st in enumerate(path):
+        when = ts(age - 2 - k * 3)
+        parts = float(rnd.randrange(40, 400, 10)) if st in ('In Repair', 'Ready for Stock') else 0.0
+        other = 25.0 if st == 'Waiting on Parts' else 0.0
+        body = CORE_NOTES.get(st, 'Not worth repairing right now; parked until a donor probe comes in.')
+        c.execute("""INSERT INTO core_transactions(core_id,performed_at,technician,description,labor_method,labor_hours,labor_rate,labor_cost,
+                     parts_cost,other_cost,work_date,work_time,actor,old_stage,new_stage) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                  (cid, when, 'Repair Tech (demo)', body, 'none', 0, 0, 0, parts, other, when[:10], rnd.choice(['', '09:30', '14:15']),
+                   'repair', prev if st != prev else None, st if st != prev else None))
+        prev = st
+    c.execute('UPDATE core_items SET stage=?, stage_started_at=? WHERE id=?',
+              (prev if stage != 'Converted to Stock' else 'Ready for Stock', ts(age - 2 - (len(path) - 1) * 3) if path else ts(age), cid))
+    if prev == 'Ready for Stock':
+        c.execute('UPDATE core_items SET qc_result=?,qc_technician=?,qc_date=?,qc_notes=? WHERE id=?', ('Passed', 'Repair Tech (demo)', ts(2), 'Demo QC pass', cid))
     if stage == 'Converted to Stock':
         core = c.execute('SELECT * FROM core_items WHERE id=?', (cid,)).fetchone()
         rc = c.execute('SELECT COALESCE(SUM(labor_cost+parts_cost+other_cost),0) FROM core_transactions WHERE core_id=?', (cid,)).fetchone()[0]
         uid = c.execute('INSERT INTO units(manufacturer,product_raw,product_key,serial,cost,notes,location_raw,physical_location,status,condition,review,inventory_code,supplier,received_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             (m, core['product_raw'], A.norm(core['product_raw']), core['serial'], round(orig + rc, 2), 'Converted from ' + code, 'A3', 'A3', 'Active', 'Refurbished', '', new_code('CC', 1), core['supplier'], d(1))).lastrowid
-        c.execute('UPDATE core_items SET converted_unit_id=? WHERE id=?', (uid, cid))
+        c.execute("""INSERT INTO core_transactions(core_id,performed_at,technician,description,labor_method,labor_hours,labor_rate,labor_cost,
+                     parts_cost,other_cost,work_date,actor,old_stage,new_stage) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                  (cid, ts(1), 'Admin (demo)', 'Converted to stock.', 'none', 0, 0, 0, 0, 0, d(1), 'sgascoine', 'Ready for Stock', 'Converted to Stock'))
+        c.execute('UPDATE core_items SET stage=?, stage_started_at=?, converted_unit_id=? WHERE id=?', ('Converted to Stock', ts(1), uid, cid))
 
 # ---------- Clients (accounts, contacts, activity) ----------
 CLIENT_INFO = {

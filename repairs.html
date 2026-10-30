@@ -728,7 +728,7 @@
                 <h1>{{r.inventory_code or 'Legacy #' ~ r.id}} · {{r.manufacturer or ''}} {{r.model or ''}}</h1>
                 <div class="muted">
                   RMA {{r.rma}} · {{r.customer}}{% if r.account_owner %} · Sales rep: {{r.account_owner}}{% endif %}
-                  · Received {{r.received_date}}
+                  · Received {{r.received_date|day}}
                 </div>
               </div>
               <a href="/repairs">← Back to the queue</a>
@@ -942,7 +942,7 @@
                   <ul class="log">
                     {% for e in work_log %}
                       <li>
-                        <div class="when">{{e.at[:16]|replace('T',' ')}} UTC · {{names.get(e.actor, e.actor) if e.actor else 'system'}}</div>
+                        <div class="when">{{e.at|daytime}} · {{names.get(e.actor, e.actor) if e.actor else 'system'}}</div>
                         <div>
                           <span class="kind">{{e.kind}}</span>
                           {% if e.kind=='stage' %}<strong>{{e.old_stage}} → {{e.new_stage}}</strong>
