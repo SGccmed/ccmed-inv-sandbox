@@ -183,7 +183,7 @@
         {% endwith %}
         <div class="panel">
           <div class="hint"><strong>CC</strong> = sellable stock · <strong>CR</strong> = core / bad inventory
-            · <strong>RP</strong> = customer-owned repair. New RP items require a separate RMA number. Date in
+            · <strong>RP</strong> = customer-owned repair: it becomes a repair ticket, and gets the next RMA number if you leave it blank. Date in
             the inventory ID is the date entered into the system.
             <br>
             Serial numbers are checked as you type; a match is only a warning, since different manufacturers
@@ -250,12 +250,17 @@
                     <input name="customer[]" list="client-list" placeholder="Start typing a client…">
                   </div>
                   <div class="field rpfield" style="display:none">
-                    <label>RMA Number *</label>
-                    <input name="rma[]">
+                    <label>RMA number</label>
+                    <input name="rma[]" placeholder="Blank = next RMA number">
                   </div>
                   <div class="field rpfield" style="display:none">
-                    <label>Technician</label>
-                    <input name="technician[]">
+                    <label>Assigned tech</label>
+                    <select name="technician[]">
+                      <option value="">Not assigned yet</option>
+                      {% for t in tech_options() %}
+                        <option value="{{t.username}}">{{t.name}}</option>
+                      {% endfor %}
+                    </select>
                   </div>
                   <div class="snalert"></div>
                 </div>
@@ -325,7 +330,7 @@
         const rp = sel.value === 'RP';
         row.querySelectorAll('.rpfield').forEach(el => {
           el.style.display = rp ? 'block' : 'none';
-          el.querySelectorAll('input').forEach(input => input.required = rp && ['customer[]', 'rma[]'].includes(input.name))
+          el.querySelectorAll('input').forEach(input => input.required = rp && ['customer[]'].includes(input.name))
         });
         row.querySelector('[name="supplier[]"]').closest('.field').style.display = rp ? 'none' : 'block';
         row.querySelector('[name="cost[]"]').closest('.field').style.display = rp ? 'none' : 'block'

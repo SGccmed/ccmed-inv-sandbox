@@ -10,7 +10,7 @@ Internal web app for tracking CC Medical's ultrasound equipment: stock, cores, c
 |---|---|---|
 | Stock (CC) | Units we own: shelf location, cost, status | `CC-MMDDYY-###` |
 | Cores (CR) | Broken units we're fixing to sell; converts to stock after QC | `CR-MMDDYY-###` |
-| Customer repairs (RP) | Customer units in for repair (RMAs), moving through 6 stages | `RP-MMDDYY-###` + RMA # |
+| Customer repairs (RP) | Repair tickets for customer units, run like a helpdesk: 14 stages, team queues, work log | `RP-MMDDYY-###` + RMA # |
 | Clients | Customer accounts, contacts, activity log, repair history | `CL-00001` |
 | Product Database | Master list of systems, probes and parts | — |
 | Users | Staff logins and roles | username |
@@ -21,13 +21,14 @@ Every page needs a staff login. Serial numbers are **not** unique keys: a matchi
 
 | File | What it does |
 |---|---|
-| `app.py` | Main app: stock, receiving, cores, customer repairs, backup/restore, spreadsheet import |
+| `app.py` | Main app: stock, receiving, cores, backup/restore, spreadsheet import |
+| `repairs.py` | Customer repair tickets: the stages, who can move each one, queues, work log |
 | `auth.py` | Logins, roles and permissions (`PERMISSIONS`), the Users page, loading accounts from `users.env` |
 | `clients.py` | Clients pages (their HTML is inside this file) |
 | `product_database.py` | Product Database pages (their HTML is inside this file) |
 | `dashboard.html` | Stock list and single-item page |
 | `inventory_entry.html` | + New Inventory receiving form |
-| `repairs.html` | Customer repairs (RMA) pages |
+| `repairs.html` | Repair queue, new ticket and ticket pages |
 | `cores.html` | Core repairs pages |
 | `seed_demo.py` | Builds `demo_inventory.db` with fake test data |
 | `wsgi.py` | Starting point Render uses to launch the app |
@@ -41,11 +42,39 @@ Each account has one or more roles. The full rules are in `PERMISSIONS` in `auth
 
 - **SuperAdmin**: everything, plus Admin accounts, database backup and restore.
 - **Admin**: all inventory, clients, catalog and settings. Manages Sales, Shipping and Technician accounts.
-- **Sales**: clients, RMAs, inventory lookups and purchase costs.
-- **Shipping**: receiving, shelf moves, RMAs, and moving repairs from Ready to Ship to Completed.
-- **Technician**: repair stages up to Ready to Ship, core labor/parts/QC, shelf moves. No costs or clients.
+- **Sales**: clients, repair tickets, repair pricing and approvals, inventory lookups and purchase costs.
+- **Shipping**: receiving, shelf moves, repair tickets, and shipping repairs back (Ready to Ship to Shipped).
+- **Technician**: repair evaluation and repair work, core labor/parts/QC, shelf moves. No costs or prices.
 
 There is always at least one active SuperAdmin, and nobody can change their own access.
+
+## Repair tickets
+
+Each customer repair is a ticket with one owner at each stage, like an IT helpdesk. The stage tells you whose turn it is, and each team has its own queue.
+
+| Stage | Whose turn | Next |
+|---|---|---|
+| Received | Repair team | In Evaluation, or At Partner |
+| In Evaluation | Repair team | Eval Complete, or Unrepairable |
+| Eval Complete | Sales (adds pricing) | Awaiting Approval (warranty tickets go straight to Approved) |
+| Awaiting Approval | Sales (on hold) | Approved, or Declined |
+| Approved | Repair team | In Repair, or At Partner |
+| In Repair | Repair team | Repair Complete, Waiting on Parts, or Unrepairable |
+| Waiting on Parts | Repair team (on hold) | In Repair |
+| Repair Complete | Sales | Ready to Ship |
+| Ready to Ship | Shipping | Shipped |
+| Shipped | Admin (invoice) | Closed |
+| Closed | — | Admin can reopen |
+| At Partner | Sales (on hold) | Eval Complete, Ready to Ship, or Shipped |
+| Declined | Sales | Ready to Ship (returned free) |
+| Unrepairable | Sales | Closed (exchanged), or Ready to Ship |
+
+- **Moving a ticket:** only the team whose turn it is can move it on; Admins can move any ticket anywhere. Every move, note and edit goes in the ticket's work log with who and when.
+- **On hold** stages don't turn yellow or red.
+- **RMA numbers** are created automatically (RMA-10001, ...) if left blank; the field can also hold a partner's RMA.
+- **Closed tickets** record a resolution: Repaired, Warranty, Declined, Exchanged, or Returned unrepaired.
+- **My tickets** shows repairs assigned to you plus repairs for clients you own as sales rep. The Sales rep and Assigned tech filters show anyone else's.
+- Databases from before v1.05 are upgraded automatically: Open Repairs becomes Received, Evaled becomes Eval Complete, QC becomes In Repair, Completed becomes Closed.
 
 ## How the live site works (Render free plan)
 
@@ -97,7 +126,7 @@ Example: `CCM_USER_SHIP=shipping | Shipping | a-long-password | Pat Lee`. Severa
 python seed_demo.py
 ```
 
-This builds `demo_inventory.db`: 67 stock items, 8 cores, 16 customer repairs, 11 clients and 28 products, all fake. It has no user accounts, so restoring it keeps the current logins.
+This builds `demo_inventory.db`: 67 stock items, 8 cores, 21 repair tickets (every stage and path), 11 clients and 28 products, all fake. It has no user accounts, so restoring it keeps the current logins.
 
 ## Run it on your own computer (Windows)
 

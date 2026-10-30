@@ -118,33 +118,71 @@ for uid in rnd.sample(active, 4):
     c.execute('INSERT INTO repair_orders(unit_id,repair_type,status,notes) VALUES (?,?,?,?)',
               (uid, rnd.choice(['Internal refurbishment','Customer repair']), rnd.choice(['Open','Closed']), 'Demo repair order [seed_demo]'))
 
-# ---------- Customer repairs (RP) across every stage ----------
+# ---------- Customer repair tickets (RP) across every stage and path ----------
+import repairs as R
 CUSTOMERS = ['Demo Valley Imaging', 'Sample Regional Hospital', 'Test Women\'s Clinic', 'Placeholder Cardiology Group',
              'Example Vet Hospital', 'Fictional Ortho Partners', 'Mock Urgent Care', 'Pretend Mobile Ultrasound']
-TECHS = ['Tech A', 'Tech B', 'Tech C']
-plan = [('Open Repairs', 1), ('Open Repairs', 5), ('Open Repairs', 9), ('Evaled', 2), ('Evaled', 6), ('In Repair', 1),
-        ('In Repair', 4), ('In Repair', 11), ('QC', 0), ('QC', 3), ('Ready to Ship', 1), ('Ready to Ship', 8),
-        ('Completed', 0), ('Completed', 0), ('Completed', 0), ('Completed', 0)]
-for i, (stage, stage_days) in enumerate(plan, start=1):
+TECHS = ['Tech A', 'Tech B', 'Tech C']          # free-text names used on the demo cores
+STANDARD = ['Received', 'In Evaluation', 'Eval Complete', 'Awaiting Approval', 'Approved', 'In Repair',
+            'Repair Complete', 'Ready to Ship', 'Shipped', 'Closed']
+PATHS = {
+    'standard': STANDARD,
+    'parts': STANDARD[:6] + ['Waiting on Parts'],
+    'warranty': ['Received', 'In Evaluation', 'Eval Complete', 'Approved', 'In Repair', 'Repair Complete',
+                 'Ready to Ship', 'Shipped', 'Closed'],
+    'declined': ['Received', 'In Evaluation', 'Eval Complete', 'Awaiting Approval', 'Declined', 'Ready to Ship',
+                 'Shipped', 'Closed'],
+    'exchange': ['Received', 'In Evaluation', 'Unrepairable', 'Closed'],
+    'outsourced': ['Received', 'At Partner', 'Eval Complete', 'Awaiting Approval', 'Approved', 'At Partner'],
+}
+# (path, how far along it gets, days in the final stage)
+plan = [('standard', 'Received', 1), ('standard', 'Received', 5), ('standard', 'In Evaluation', 2),
+        ('standard', 'In Evaluation', 6), ('standard', 'Eval Complete', 1), ('standard', 'Awaiting Approval', 9),
+        ('standard', 'Approved', 2), ('standard', 'In Repair', 4), ('standard', 'In Repair', 11),
+        ('parts', 'Waiting on Parts', 6), ('standard', 'Repair Complete', 1), ('standard', 'Ready to Ship', 2),
+        ('standard', 'Shipped', 3), ('standard', 'Closed', 0), ('standard', 'Closed', 0),
+        ('declined', 'Declined', 1), ('declined', 'Closed', 0), ('exchange', 'Unrepairable', 2),
+        ('exchange', 'Closed', 0), ('outsourced', 'At Partner', 8), ('warranty', 'Eval Complete', 1)]
+FINDINGS = ['Two dead elements near the center of the array', 'Lens delaminated; needs relensing',
+            'Cable conductor break near strain relief', 'Connector pins bent; housing cracked']
+closed_std = []
+for i, (path_name, stop, stage_days) in enumerate(plan, start=1):
     m, x, cat = rnd.choice([t for t in ALL_MODELS if t[2] != 'PTS'])
-    idx = A.REPAIR_STAGES.index(stage)
-    received = stage_days + idx * rnd.randint(2, 4) + rnd.randint(0, 3)
-    code = new_code('RP', received)
-    path = A.REPAIR_STAGES[:idx + 1]
-    # stage start times walking forward from the received date
-    starts = [ts(received)]
-    for k in range(1, len(path)):
-        frac = k / (len(path) - 1) if len(path) > 1 else 1
-        starts.append(ts(round(received - (received - stage_days) * frac)))
-    completed = starts[-1] if stage == 'Completed' else None
-    rid = c.execute('INSERT INTO customer_repairs(rma,customer,manufacturer,model,part_number,serial,location,received_date,technician,notes,stage,stage_started_at,created_at,updated_at,completed_at,inventory_code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        (f'RMA-DEMO-{1000+i}', rnd.choice(CUSTOMERS), m, x, '', serial(), rnd.choice(['R1','R2','R3']), d(received), rnd.choice(TECHS),
-         rnd.choice(['Image dropout on elements', 'Cracked lens', 'Will not power on', 'Cable strain relief torn', 'Intermittent connector fault']),
-         stage, starts[-1], starts[0], starts[-1], completed, code)).lastrowid
-    prev = None
-    for st, when in zip(path, starts):
-        c.execute('INSERT INTO customer_repair_history(repair_id,old_stage,new_stage,changed_at,note) VALUES (?,?,?,?,?)',
-                  (rid, prev, st, when, 'RMA created' if prev is None else 'Demo stage change')); prev = st
+    path = PATHS[path_name][:PATHS[path_name].index(stop, 2 if path_name == 'outsourced' and stop == 'At Partner' else 0) + 1]
+    received = stage_days + len(path) * rnd.randint(1, 3) + rnd.randint(0, 2)
+    whens = [ts(round(received - (received - stage_days) * k / max(1, len(path) - 1))) for k in range(len(path))]
+    sn = serial()
+    if path_name == 'warranty' and closed_std:      # same serial as an earlier, closed repair
+        sn, m, x = c.execute('SELECT serial, manufacturer, model FROM customer_repairs WHERE id=?', (closed_std[0],)).fetchone()
+    rid = R.create_ticket(c, client={'id': None, 'name': rnd.choice(CUSTOMERS)}, rma=f'RMA-DEMO-{1000 + i}',
+                          received=d(received), code=new_code('RP', received), when=whens[0], note='Demo ticket created',
+                          fields={'manufacturer': m, 'model': x, 'serial': sn, 'location': rnd.choice(['R1', 'R2', 'R3']),
+                                  'notes': rnd.choice(['Image dropout on elements', 'Cracked lens', 'Will not power on',
+                                                       'Cable strain relief torn', 'Intermittent connector fault'])})
+    upd = {}
+    if len(path) > 1 and path[1] != 'At Partner':
+        upd['assigned_to'] = 'repair'                # the Technician test account
+    if 'Eval Complete' in path or 'Unrepairable' in path:
+        upd['eval_findings'] = rnd.choice(FINDINGS)
+    if 'Awaiting Approval' in path:
+        upd['quoted_price'] = float(rnd.randrange(350, 2600, 25)); upd['estimate_number'] = f'EST-DEMO-{rnd.randint(1000, 9999)}'
+    if path_name == 'warranty':
+        upd['warranty'] = 1; upd['warranty_of_id'] = closed_std[0] if closed_std else None; upd['quoted_price'] = 0.0
+    if path_name == 'standard' and stop == 'Closed':
+        upd['invoice_number'] = f'INV-DEMO-{rnd.randint(1000, 9999)}'
+    if upd:
+        c.execute('UPDATE customer_repairs SET ' + ', '.join(f'{k}=?' for k in upd) + ' WHERE id=?', [*upd.values(), rid])
+    for stage, when in zip(path[1:], whens[1:]):
+        row = c.execute('SELECT * FROM customer_repairs WHERE id=?', (rid,)).fetchone()
+        R.move_ticket(c, row, stage, 'Demo stage change', when=when)
+        if stage == 'Waiting on Parts':
+            R.log(c, rid, 'note', 'Ordered replacement lens from Demo Parts Co., expected Friday', when=when)
+        if stage == 'Shipped':
+            R.log(c, rid, 'note', f'Shipped UPS Ground, tracking 1ZDEMO{rnd.randint(100000, 999999)}', when=when)
+        if stage == 'At Partner':
+            R.log(c, rid, 'note', 'Sent to Demo Probe Partners; partner RMA PR-DEMO-77', when=when)
+    if path_name == 'standard' and stop == 'Closed':
+        closed_std.append(rid)
 
 # ---------- Cores (CR) in every stage ----------
 core_plan = ['Needs Repair', 'Needs Repair', 'Needs Repair', 'In Repair', 'In Repair', 'QC', 'Ready for Stock', 'Converted to Stock']
@@ -170,12 +208,12 @@ for i, stage in enumerate(core_plan):
 
 # ---------- Clients (accounts, contacts, activity) ----------
 CLIENT_INFO = {
- 'Demo Valley Imaging': ('Imaging Center', 'Active', 'Net 30', 'jsmith'), 'Sample Regional Hospital': ('Hospital', 'Active', 'Net 45', 'jsmith'),
- "Test Women's Clinic": ("OB/GYN / Women's Health", 'Active', 'Net 30', 'mlee'), 'Placeholder Cardiology Group': ('Cardiology', 'Active', 'Net 30', 'mlee'),
- 'Example Vet Hospital': ('Veterinary', 'Active', 'Credit card on file', 'jsmith'), 'Fictional Ortho Partners': ('Clinic / Physician Office', 'On Hold', 'Prepaid', 'mlee'),
- 'Mock Urgent Care': ('Clinic / Physician Office', 'Active', 'Due on receipt', 'jsmith'), 'Pretend Mobile Ultrasound': ('Mobile Ultrasound', 'Active', 'Net 15', 'mlee'),
- 'Sample Biomed Services': ('Biomed / ISO', 'Prospect', '', 'jsmith'), 'Imaginary Equipment Brokers': ('Dealer / Broker', 'Prospect', '', 'mlee'),
- 'Old Demo Clinic': ('Clinic / Physician Office', 'Inactive', 'Net 30', 'jsmith')}
+ 'Demo Valley Imaging': ('Imaging Center', 'Active', 'Net 30', 'sales'), 'Sample Regional Hospital': ('Hospital', 'Active', 'Net 45', 'sales'),
+ "Test Women's Clinic": ("OB/GYN / Women's Health", 'Active', 'Net 30', 'sgascoine'), 'Placeholder Cardiology Group': ('Cardiology', 'Active', 'Net 30', 'sgascoine'),
+ 'Example Vet Hospital': ('Veterinary', 'Active', 'Credit card on file', 'sales'), 'Fictional Ortho Partners': ('Clinic / Physician Office', 'On Hold', 'Prepaid', 'sgascoine'),
+ 'Mock Urgent Care': ('Clinic / Physician Office', 'Active', 'Due on receipt', 'sales'), 'Pretend Mobile Ultrasound': ('Mobile Ultrasound', 'Active', 'Net 15', 'sgascoine'),
+ 'Sample Biomed Services': ('Biomed / ISO', 'Prospect', '', 'sales'), 'Imaginary Equipment Brokers': ('Dealer / Broker', 'Prospect', '', 'sgascoine'),
+ 'Old Demo Clinic': ('Clinic / Physician Office', 'Inactive', 'Net 30', 'sales')}
 FIRST = ['Alex', 'Jordan', 'Taylor', 'Casey', 'Morgan', 'Riley', 'Jamie', 'Drew', 'Avery', 'Quinn', 'Reese', 'Skyler']
 LAST = ['Sample', 'Demo', 'Tester', 'Example', 'Mockley', 'Placeholder']
 TITLES = ['Biomed Manager', 'Lead Sonographer', 'Practice Manager', 'Purchasing', 'Accounts Payable', 'Clinical Director']
@@ -207,6 +245,6 @@ c.execute("UPDATE core_items SET serial=? WHERE id=(SELECT MIN(id) FROM core_ite
 
 c.commit()
 counts = {t: c.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0] for t in
-          ['units', 'movements', 'repair_orders', 'customer_repairs', 'core_items', 'core_transactions', 'products', 'clients', 'client_contacts', 'client_activity', 'users']}
+          ['units', 'movements', 'repair_orders', 'customer_repairs', 'repair_log', 'core_items', 'core_transactions', 'products', 'clients', 'client_contacts', 'client_activity', 'users']}
 c.close()
 print(f'Created {out}'); print(counts)

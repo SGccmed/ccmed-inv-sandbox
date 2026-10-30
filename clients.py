@@ -206,7 +206,7 @@ DETAIL_PAGE = '''<p><a href="/clients">← Clients</a></p>
 <td>{% if not p.is_primary and can('client_edit') %}<form method="post" action="/clients/{{c.id}}/contacts/{{p.id}}/primary" style="display:inline"><button class="secondary">Make primary</button></form> <form method="post" action="/clients/{{c.id}}/contacts/{{p.id}}/remove" style="display:inline"><button class="secondary">Remove</button></form>{% endif %}</td></tr>{% else %}<tr><td colspan="5">No contacts yet.</td></tr>{% endfor %}</table>
 {% if can('client_edit') %}<h2 style="margin-top:20px">Add contact</h2><form method="post" action="/clients/{{c.id}}/contacts" class="grid"><div><label>Name *</label><input name="name" required></div><div><label>Title</label><input name="title"></div><div><label>Phone</label><input name="phone"></div><div><label>Email</label><input name="email" type="email"></div><div><label>&nbsp;</label><label><input type="checkbox" name="is_primary" value="1" style="width:auto"> Primary contact</label></div><div><label>&nbsp;</label><button>Add contact</button></div></form>{% endif %}</section></div>
 
-<div class="tab" id="t-repairs"><section><h2>Customer repairs (RMAs)</h2><div style="overflow:auto"><table><tr><th>Inventory ID</th><th>RMA</th><th>Equipment</th><th>Serial</th><th>Stage</th><th>Received</th><th>Completed</th><th>Technician</th></tr>{% for r in repairs %}<tr><td>{{r.inventory_code or 'Legacy'}}</td><td><a href="/repairs/{{r.id}}"><strong>{{r.rma}}</strong></a></td><td>{{r.manufacturer or ''}} {{r.model or ''}}</td><td>{{r.serial or ''}}</td><td><span class="pill">{{r.stage}}</span></td><td>{{r.received_date}}</td><td>{{(r.completed_at or '')[:10]}}</td><td>{{r.technician or ''}}</td></tr>{% else %}<tr><td colspan="8">No repairs for this client.</td></tr>{% endfor %}</table></div></section></div>
+<div class="tab" id="t-repairs"><section><h2>Customer repairs (RMAs)</h2><div style="overflow:auto"><table><tr><th>Inventory ID</th><th>RMA</th><th>Equipment</th><th>Serial</th><th>Stage</th><th>Received</th><th>Closed</th><th>Assigned</th></tr>{% for r in repairs %}<tr><td>{{r.inventory_code or 'Legacy'}}</td><td><a href="/repairs/{{r.id}}"><strong>{{r.rma}}</strong></a></td><td>{{r.manufacturer or ''}} {{r.model or ''}}</td><td>{{r.serial or ''}}</td><td><span class="pill">{{r.stage}}</span></td><td>{{r.received_date}}</td><td>{{(r.completed_at or '')[:10]}}{% if r.resolution %} · {{r.resolution}}{% endif %}</td><td>{{r.assigned_to or r.technician or ''}}</td></tr>{% else %}<tr><td colspan="8">No repairs for this client.</td></tr>{% endfor %}</table></div></section></div>
 
 <div class="tab" id="t-loaners"><section><h2>Loaners</h2><p class="muted">Loaner tracking is the next module to be built. Loaners sent to this client will be listed here.</p></section></div>
 <div class="tab" id="t-sales"><section><h2>Sales</h2><p class="muted">Sales records will be listed here once sales tracking is built.</p></section></div>
@@ -267,14 +267,14 @@ def register_client_routes(app, conn):
         if owner:
             where.append('c.account_owner=?'); args.append(owner)
         sql = '''SELECT c.*, (SELECT name FROM client_contacts p WHERE p.client_id=c.id AND p.active=1 ORDER BY is_primary DESC,id LIMIT 1) contact,
-          (SELECT COUNT(*) FROM customer_repairs r WHERE r.client_id=c.id AND r.stage<>'Completed') open_rmas,
+          (SELECT COUNT(*) FROM customer_repairs r WHERE r.client_id=c.id AND r.stage<>'Closed') open_rmas,
           (SELECT COUNT(*) FROM customer_repairs r WHERE r.client_id=c.id) total_rmas,
           (SELECT MAX(created_at) FROM client_activity a WHERE a.client_id=c.id) last_activity FROM clients c'''
         c = conn()
         rows = c.execute(sql + (' WHERE ' + ' AND '.join(where) if where else '') + ' ORDER BY c.name COLLATE NOCASE', args).fetchall()
         stats = c.execute('''SELECT COUNT(*) total, SUM(status='Active') active, SUM(status='Prospect') prospect,
-          (SELECT COUNT(DISTINCT client_id) FROM customer_repairs WHERE stage<>'Completed' AND client_id IS NOT NULL) open_clients,
-          (SELECT COUNT(*) FROM customer_repairs WHERE stage<>'Completed' AND client_id IS NOT NULL) open_rmas FROM clients''').fetchone()
+          (SELECT COUNT(DISTINCT client_id) FROM customer_repairs WHERE stage<>'Closed' AND client_id IS NOT NULL) open_clients,
+          (SELECT COUNT(*) FROM customer_repairs WHERE stage<>'Closed' AND client_id IS NOT NULL) open_rmas FROM clients''').fetchone()
         owners = [r[0] for r in c.execute("SELECT DISTINCT account_owner FROM clients WHERE COALESCE(account_owner,'')<>'' ORDER BY 1")]
         c.close()
         return page(LIST_PAGE, rows=rows, stats=stats, q=q, type=typ, status=status, owner=owner, owners=owners,
@@ -371,22 +371,26 @@ def register_client_routes(app, conn):
     def client_detail(cid):
         c = conn(); cl = get_client(c, cid)
         contacts = c.execute('SELECT * FROM client_contacts WHERE client_id=? AND active=1 ORDER BY is_primary DESC,name', (cid,)).fetchall()
-        repairs = c.execute("SELECT * FROM customer_repairs WHERE client_id=? ORDER BY CASE WHEN stage='Completed' THEN 1 ELSE 0 END, received_date DESC", (cid,)).fetchall()
+        repairs = c.execute("SELECT * FROM customer_repairs WHERE client_id=? ORDER BY CASE WHEN stage='Closed' THEN 1 ELSE 0 END, received_date DESC", (cid,)).fetchall()
         timeline = []
         for a in c.execute('SELECT * FROM client_activity WHERE client_id=?', (cid,)):
             timeline.append({'cat': 'System' if a['kind'] == 'System' else 'Activity', 'title': (a['kind'] + ': ' if a['kind'] != 'System' else '') + (a['subject'] or ''),
                              'detail': a['details'], 'when': a['created_at'], 'actor': a['actor'], 'url': None})
-        for h in c.execute('''SELECT h.*, r.rma, r.model, r.manufacturer, r.id rid FROM customer_repair_history h JOIN customer_repairs r ON r.id=h.repair_id WHERE r.client_id=?''', (cid,)):
+        # Repair ticket work log (repairs.py): receipts and stage moves show on the client timeline.
+        for h in c.execute('''SELECT h.*, r.rma, r.inventory_code, r.model, r.manufacturer, r.id rid FROM repair_log h
+                              JOIN customer_repairs r ON r.id=h.repair_id
+                              WHERE r.client_id=? AND h.kind IN ('created','stage')''', (cid,)):
             eq = f"{h['manufacturer'] or ''} {h['model'] or ''}".strip()
-            title = f"{h['rma']} received ({eq})" if h['old_stage'] is None else f"{h['rma']}: {h['old_stage']} → {h['new_stage']}"
-            timeline.append({'cat': 'Repair', 'title': title, 'detail': h['note'] if h['old_stage'] is not None else '', 'when': h['changed_at'], 'actor': '', 'url': f"/repairs/{h['rid']}"})
+            ticket = h['inventory_code'] or h['rma']
+            title = f"{ticket} received ({eq})" if h['kind'] == 'created' else f"{ticket}: {h['old_stage']} → {h['new_stage']}"
+            timeline.append({'cat': 'Repair', 'title': title, 'detail': h['text'] if h['kind'] == 'stage' else '', 'when': h['at'], 'actor': h['actor'] or '', 'url': f"/repairs/{h['rid']}"})
         timeline.sort(key=lambda e: e['when'] or '', reverse=True)
         done = [r for r in repairs if r['completed_at']]
         avg = None
         if done:
             from datetime import date
             avg = round(sum(max(0, (datetime.fromisoformat(r['completed_at']).date() - date.fromisoformat(r['received_date'])).days) for r in done) / len(done), 1)
-        kpi = {'open': sum(1 for r in repairs if r['stage'] != 'Completed'), 'total': len(repairs), 'avg_days': avg}
+        kpi = {'open': sum(1 for r in repairs if r['stage'] != 'Closed'), 'total': len(repairs), 'avg_days': avg}
         c.close()
         return page(DETAIL_PAGE, c=cl, contacts=contacts, primary=contacts[0] if contacts and contacts[0]['is_primary'] else None,
                     repairs=repairs, timeline=timeline, kpi=kpi, kinds=ACTIVITY_KINDS)

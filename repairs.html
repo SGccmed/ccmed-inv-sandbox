@@ -294,6 +294,187 @@
         margin: 6px 0 0;
         padding-left: 18px
       }
+      /* ---- v1.05: repair tickets ---- */
+      .guide {
+        background: #f4f6f9;
+        border: 1px solid #e1e7ee;
+        border-left: 4px solid #9aabbb;
+        border-radius: 8px;
+        padding: 12px 14px;
+        color: #5d6f80;
+        margin-bottom: 20px
+      }
+      .guide strong {
+        color: #3f5263
+      }
+      .hint {
+        color: #8696a5;
+        font-size: 12px;
+        margin-top: 4px
+      }
+      ::placeholder {
+        color: #a3b0bc
+      }
+      .tabs {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 14px
+      }
+      .tabs a {
+        padding: 8px 13px;
+        border-radius: 8px;
+        background: #e9eff5;
+        color: #3d5c76;
+        font-weight: 600;
+        font-size: 13px
+      }
+      .tabs a.on {
+        background: var(--blue);
+        color: white
+      }
+      .tabs a span {
+        opacity: .75;
+        font-weight: 400;
+        margin-left: 4px
+      }
+      .stagecards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 10px;
+        margin-bottom: 20px
+      }
+      .stagecards a {
+        background: white;
+        border: 1px solid var(--line);
+        border-top: 4px solid #c9d5e0;
+        border-radius: 10px;
+        padding: 10px 12px;
+        color: var(--ink)
+      }
+      .stagecards a:hover {
+        border-color: #82b1d2;
+        text-decoration: none
+      }
+      .stagecards a.on {
+        border-color: var(--blue)
+      }
+      .stagecards strong {
+        display: block;
+        font-size: 22px
+      }
+      .stagecards span {
+        font-size: 12px;
+        font-weight: 600
+      }
+      .stagecards small {
+        display: block;
+        color: var(--muted);
+        font-size: 11px
+      }
+      .team-Repair-team {
+        border-top-color: #5b8fd6 !important
+      }
+      .team-Sales {
+        border-top-color: #e2875a !important
+      }
+      .team-Shipping {
+        border-top-color: #3aa77f !important
+      }
+      .team-Admin {
+        border-top-color: #2d4a73 !important
+      }
+      .tablewrap td:nth-child(-n+2) {
+        white-space: nowrap
+      }
+      .pill.hold {
+        background: #eef0f3;
+        color: #6b7785
+      }
+      .pill.closed {
+        background: #dcf3e6;
+        color: #236947
+      }
+      .pill.team {
+        background: #f3f0ea;
+        color: #6a5a3d
+      }
+      .filters {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr auto;
+        gap: 9px;
+        align-items: end;
+        margin-bottom: 16px
+      }
+      .filters label {
+        display: block;
+        font-weight: 600;
+        font-size: 12px;
+        margin-bottom: 4px
+      }
+      .moves {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center
+      }
+      .moves button {
+        margin: 0
+      }
+      .twocol {
+        display: grid;
+        grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+        gap: 20px;
+        align-items: start
+      }
+      .log {
+        list-style: none;
+        margin: 0;
+        padding: 0
+      }
+      .log li {
+        border-bottom: 1px solid #eef2f6;
+        padding: 9px 0
+      }
+      .log .when {
+        color: var(--muted);
+        font-size: 12px
+      }
+      .log .kind {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+        color: #8696a5;
+        margin-right: 6px
+      }
+      .log .text {
+        white-space: pre-line
+      }
+      .section-title {
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .6px;
+        color: #8696a5;
+        margin: 18px 0 10px;
+        grid-column: 1/-1
+      }
+      .checkline {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-weight: 600;
+        font-size: 13px
+      }
+      .checkline input {
+        width: auto
+      }
+      @media(max-width:900px) {
+        .twocol,
+        .filters {
+          grid-template-columns: 1fr
+        }
+      }
     </style>
   </head>
   <body>
@@ -307,11 +488,11 @@
         {% if can('client_view') %}
           <a class="nav" href="/clients">Clients</a>
         {% endif %}
-        <a class="sideitem" href="/products">Product Database</a>
+        <a class="nav" href="/products">Product Database</a>
         <a class="nav" href="/cores">Core Repairs (CR)</a>
         <a class="nav" href="/?view=Active">Active Inventory</a>
         <a class="nav" href="/?view=Sold%20archive">Sold Archive</a>
-        <a class="nav active" href="/repairs">Repair</a>
+        <a class="nav active" href="/repairs">Customer Repairs</a>
         <a class="nav" href="/?view=On%20loan">Loaners</a>
         <a class="nav" href="/?view=Rental">Rental</a>
         <a class="nav" href="/?view=Pending%20review">Pending</a>
@@ -319,260 +500,485 @@
         <a class="nav" href="/?view=All">All Records</a>
       </aside>
       <div class="main">
-        <header class="top">Customer Repairs / RMA Tracking</header>
+        <header class="top">Customer Repairs / Repair Tickets</header>
         <main class="content">
           {% with messages=get_flashed_messages() %}
             {% for m in messages %}
               <div class="notice {% if m.startswith('⚠') %}warn{% endif %}">{{m}}</div>
             {% endfor %}
           {% endwith %}
+
+          {# ================================================================== #}
+          {#  QUEUE: the list of tickets                                           #}
+          {# ================================================================== #}
           {% if mode=='list' %}
             <div class="head">
               <div>
-                <h1>Customer Repairs</h1>
-                <div class="muted">Each RMA tracks one customer-owned item · Calendar days</div>
+                <h1>Repair queue</h1>
+                <div class="muted">Each ticket is one customer-owned unit. The colour bar shows whose turn it is.</div>
               </div>
               {% if can('rma_create') %}
-                <a class="btn" href="/repairs/new">+ Create RMA</a>
+                <a class="btn" href="/repairs/new">+ New repair ticket</a>
               {% endif %}
             </div>
-            <div class="grid">
-              {% for stage in stages %}
-                <a class="card" href="/repairs?stage={{stage|urlencode}}"><span>{{stage}}</span><strong>{{counts.get(stage,0)}}</strong>
-                <div class="muted">View RMAs</div>
+
+            <div class="tabs">
+              <a href="/repairs?queue=mine" class="{% if queue=='mine' %}on{% endif %}">My tickets<span>{{mine_count}}</span></a>
+              {% for t in teams %}
+                <a href="/repairs?queue={{t|urlencode}}" class="{% if queue==t %}on{% endif %}">{{t}}<span>{{team_counts[t]}}</span></a>
+              {% endfor %}
+              <a href="/repairs?queue=open" class="{% if queue=='open' %}on{% endif %}">All open<span>{{open_count}}</span></a>
+              <a href="/repairs?queue=closed" class="{% if queue=='closed' %}on{% endif %}">Closed<span>{{counts.get('Closed',0)}}</span></a>
+            </div>
+            <p class="hint" style="margin:-6px 0 14px">
+              My tickets = repairs assigned to you, plus repairs for clients you own as sales rep.
+            </p>
+
+            <div class="stagecards">
+              {% for s in open_stages %}
+                <a href="/repairs?stage={{s|urlencode}}" class="team-{{(stages[s].team or '')|replace(' ','-')}} {% if stage==s %}on{% endif %}">
+                  <span>{{s}}</span>
+                  <strong>{{counts.get(s,0)}}</strong>
+                  <small>{{stages[s].team}}{% if stages[s].hold %} · on hold{% endif %}</small>
                 </a>
               {% endfor %}
             </div>
+
             <div class="panel">
-              <h2>{{selected if selected else 'All Customer Repairs'}}</h2>
-              <form class="toolbar" method="get">
-                <input type="hidden" name="stage" value="{{selected}}">
-                <input name="q" placeholder="Search RMA, customer, serial, location, model..." value="{{q}}"><button>Search</button><a class="btn secondary" href="/repairs">Clear</a>
+              <form class="filters" method="get">
+                {% if stage %}
+                  <input type="hidden" name="stage" value="{{stage}}">
+                {% else %}
+                  <input type="hidden" name="queue" value="{{queue}}">
+                {% endif %}
+                <div>
+                  <label>Search this queue</label>
+                  <input name="q" value="{{q}}" placeholder="Ticket, RMA, client, serial, model, part number or location">
+                </div>
+                <div>
+                  <label>Client's sales rep</label>
+                  <select name="rep">
+                    <option value="">Any rep</option>
+                    {% for p in reps %}
+                      <option value="{{p}}" {% if p==rep %}selected{% endif %}>{{p}}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div>
+                  <label>Assigned tech</label>
+                  <select name="tech">
+                    <option value="">Anyone</option>
+                    {% for t in techs %}
+                      <option value="{{t.username}}" {% if t.username==tech %}selected{% endif %}>{{t.name}}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="actions" style="margin:0">
+                  <button>Filter</button>
+                  <a class="btn secondary" href="/repairs">Reset</a>
+                </div>
               </form>
+              <h2>
+                {% if stage %}{{stage}}
+                {% elif queue=='mine' %}My tickets
+                {% elif queue=='open' %}All open tickets
+                {% elif queue=='closed' %}Closed tickets
+                {% else %}{{queue}} queue{% endif %}
+                <span class="muted">· {{rows|length}} shown, oldest first</span>
+              </h2>
               <div class="tablewrap">
                 <table>
                   <thead>
                     <tr>
-                      <th>Inventory ID</th>
+                      <th>Ticket</th>
                       <th>RMA</th>
-                      <th>Customer</th>
-                      <th>Model / Part</th>
+                      <th>Client</th>
+                      <th>Sales rep</th>
+                      <th>Equipment</th>
                       <th>Serial</th>
-                      <th>Location</th>
                       <th>Stage</th>
-                      <th>Days in Stage</th>
-                      <th>Total Days</th>
-                      <th>Technician</th>
+                      <th>Whose turn</th>
+                      <th>Assigned</th>
+                      <th>In stage</th>
+                      <th>Total</th>
                     </tr>
                   </thead>
                   <tbody>
                     {% for r in rows %}
                       <tr>
-                        <td>{{r.inventory_code or "Legacy"}}</td>
-                        <td><a href="/repairs/{{r.id}}"><strong>{{r.rma}}</strong></a></td>
+                        <td><a href="/repairs/{{r.id}}"><strong>{{r.inventory_code or 'Legacy #' ~ r.id}}</strong></a></td>
+                        <td>{{r.rma}}</td>
                         <td>
                           {% if r.client_id and can('client_view') %}
-                            <a href="/clients/{{r.client_id}}">{{r.customer}}</a>{% else %}{{r.customer}}
+                            <a href="/clients/{{r.client_id}}">{{r.customer}}</a>
+                          {% else %}
+                            {{r.customer}}
                           {% endif %}
                         </td>
-                        <td>{{r.model}} / {{r.part_number}}</td>
-                        <td>{{r.serial}}</td>
-                        <td>{{r.location}}</td>
-                        <td><span class="pill">{{r.stage}}</span></td>
-                        <td><span class="pill {{r.alert}}">{{'Closed' if r.stage=='Completed' else r.stage_days ~ ' days'}}</span></td>
-                        <td>{{r.total_days}} days</td>
-                        <td>{{r.technician}}</td>
+                        <td>{{r.account_owner or ''}}</td>
+                        <td>{{r.manufacturer or ''}} {{r.model or ''}}</td>
+                        <td>{{r.serial or ''}}</td>
+                        <td><span class="pill">{{r.stage}}</span>{% if r.warranty %} <span class="pill">Warranty</span>{% endif %}</td>
+                        <td>{{r.team}}</td>
+                        <td>{{r.assigned_name or '—'}}</td>
+                        <td>
+                          {% if r.age=='closed' %}
+                            <span class="pill closed">{{r.resolution or 'Closed'}}</span>
+                          {% elif r.age=='hold' %}
+                            <span class="pill hold">On hold · {{r.stage_days}} d</span>
+                          {% else %}
+                            <span class="pill {{r.age}}">{{r.stage_days}} d</span>
+                          {% endif %}
+                        </td>
+                        <td>{{r.total_days}} d</td>
                       </tr>
                     {% else %}
                       <tr>
-                        <td colspan="10">No RMAs found. Select Create RMA to begin.</td>
+                        <td colspan="11">Nothing in this queue.</td>
                       </tr>
                     {% endfor %}
                   </tbody>
                 </table>
               </div>
             </div>
+
+          {# ================================================================== #}
+          {#  NEW TICKET                                                          #}
+          {# ================================================================== #}
           {% elif mode=='new' %}
             <div class="head">
-              <h1>Create Customer RMA</h1>
-              <a href="/repairs">← Back to Repairs</a>
+              <h1>New repair ticket</h1>
+              <a href="/repairs">← Back to the queue</a>
+            </div>
+            <div class="guide">
+              <strong>One ticket per unit.</strong> The ticket starts in <strong>Received</strong>, in the repair
+              team's queue. Units arriving with other stock can also be received through + New Inventory (type RP).
             </div>
             <div class="panel">
-              <p class="muted">New RMAs automatically start in <strong>Open Repairs</strong>. One RMA per
-                piece of equipment.</p>
               <form method="post">
                 <div class="fields">
                   <div class="field">
-                    <label>RMA Number *</label>
-                    <input name="rma" required maxlength="100">
-                  </div>
-                  <div class="field">
-                    <label>Customer (client) *</label>
-                    <input name="customer" required list="client-list" value="{{preset_client}}" placeholder="Start typing a client…" autocomplete="off">
+                    <label>Client *</label>
+                    <input name="customer" required list="client-list" value="{{preset_client}}" placeholder="Start typing a client name or CL- number" autocomplete="off">
                     <datalist id="client-list">
                       {% for c in client_options() %}
                         <option value="{{c.client_code}} · {{c.name}}">
                       {% endfor %}
                     </datalist>
-                    <div class="muted" style="font-size:12px">Not listed?
-                      <a href="/clients/new" target="_blank">Add a client</a></div>
+                    <div class="hint">Not listed? <a href="/clients/new" target="_blank">Add the client</a> first, then pick it here.</div>
+                  </div>
+                  <div class="field">
+                    <label>RMA number</label>
+                    <input name="rma" maxlength="100" placeholder="Leave blank to use {{rma_suggestion}}">
+                    <div class="hint">We issue RMA numbers. Leave it blank and the next one is used automatically.</div>
                   </div>
                   <div class="field">
                     <label>Manufacturer</label>
-                    <input name="manufacturer">
+                    <input name="manufacturer" placeholder="e.g. GE, Philips">
                   </div>
                   <div class="field">
                     <label>Model</label>
-                    <input name="model">
+                    <input name="model" placeholder="e.g. C1-6-D">
                   </div>
                   <div class="field">
-                    <label>Part Number</label>
-                    <input name="part_number">
+                    <label>Part number</label>
+                    <input name="part_number" placeholder="OEM part number, if known">
                   </div>
                   <div class="field">
-                    <label>Serial Number</label>
-                    <input name="serial">
-                  </div>
-                  <div class="field">
-                    <label>Physical Location</label>
-                    <input name="location" placeholder="e.g. A1 / Repair Bench">
-                  </div>
-                  <div class="field">
-                    <label>Date Received *</label>
-                    <input name="received_date" type="date" value="{{today}}" required>
-                  </div>
-                  <div class="field">
-                    <label>Assigned Technician</label>
-                    <input name="technician">
-                  </div>
-                  <div class="field wide">
-                    <label>Notes</label>
-                    <textarea name="notes" rows="3"></textarea>
-                  </div>
-                </div>
-                <div class="actions"><button>Create
-                  RMA</button><a class="btn secondary" href="/repairs">Cancel</a></div>
-              </form>
-            </div>
-          {% else %}
-            <div class="head">
-              <div>
-                <h1>RMA {{r.rma}}</h1>
-                <div class="muted">Inventory ID: {{r.inventory_code or "Legacy RMA"}}</div>
-                <div class="muted">{{r.customer}} · Received {{r.received_date}}</div>
-              </div>
-              <a href="/repairs">← Back to Repairs</a>
-            </div>
-            <div class="grid">
-              <div class="card"><span>Current
-                Stage</span><strong style="font-size:21px">{{r.stage}}</strong></div>
-              <div class="card"><span>Days in
-                Stage</span><strong><span class="pill {{r.alert}}">{{'Closed' if r.stage=='Completed' else r.stage_days ~ ' days'}}</span></strong></div>
-              <div class="card"><span>Total Repair Days</span><strong>{{r.total_days}}</strong></div>
-            </div>
-            <div class="panel">
-              {% if same_serial %}
-                <div class="snbox"><strong>⚠ Same serial number on other records</strong> — check the
-                  manufacturer/model; serials can repeat across manufacturers.
-                  <ul>
-                    {% for m in same_serial %}
-                      <li><a href="{{m.url}}">{{m.code}}</a> · {{m.kind}} · <strong>{{m.manufacturer}}
-                        {{m.product}}</strong> · {{m.status}}{% if m.where %} · {{m.where}}{% endif %}</li>
-                    {% endfor %}
-                  </ul>
-                </div>
-              {% endif %}
-              <h2>Repair Details</h2>
-              <form method="post" action="/repairs/{{r.id}}/update">
-                <div class="fields">
-                  <div class="field">
-                    <label>Customer (client)</label>
-                    <input name="customer" value="{{client_text}}" required list="client-list" autocomplete="off" {% if not can('rma_create') %}readonly title="Your role can't change the customer"{% endif %}>
-                    <datalist id="client-list">
-                      {% for c in client_options() %}
-                        <option value="{{c.client_code}} · {{c.name}}">
-                      {% endfor %}
-                    </datalist>
-                    {% if client and can('client_view') %}
-                      <div style="font-size:12px"><a href="/clients/{{client.id}}">Open client record
-                        →</a></div>
-                    {% endif %}
-                  </div>
-                  <div class="field">
-                    <label>Current Stage</label>
-                    <select name="stage">
-                    {% for stage in stages %}
-                      <option value="{{stage}}" {% if stage==r.stage %}selected{% endif %}>
-                      {{stage}}
-                      </option>
-                    {% endfor %}
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label>Manufacturer</label>
-                    <input name="manufacturer" value="{{r.manufacturer or ''}}">
-                  </div>
-                  <div class="field">
-                    <label>Model</label>
-                    <input name="model" value="{{r.model or ''}}">
-                  </div>
-                  <div class="field">
-                    <label>Part Number</label>
-                    <input name="part_number" value="{{r.part_number or ''}}">
-                  </div>
-                  <div class="field">
-                    <label>Serial Number</label>
-                    <input name="serial" value="{{r.serial or ''}}">
+                    <label>Serial number</label>
+                    <input name="serial" placeholder="As printed on the unit">
+                    <div class="hint">If this serial was here before, the ticket will show its past repairs (useful for warranty).</div>
                   </div>
                   <div class="field">
                     <label>Location</label>
-                    <input name="location" value="{{r.location or ''}}">
+                    <input name="location" placeholder="e.g. Repair rack R1">
                   </div>
                   <div class="field">
-                    <label>Technician</label>
-                    <input name="technician" value="{{r.technician or ''}}">
+                    <label>Date received *</label>
+                    <input name="received_date" type="date" value="{{today}}" required>
+                  </div>
+                  <div class="field">
+                    <label>Assigned tech</label>
+                    <select name="assigned_to">
+                      <option value="">Not assigned yet</option>
+                      {% for t in techs %}
+                        <option value="{{t.username}}">{{t.name}}</option>
+                      {% endfor %}
+                    </select>
+                    <div class="hint">Optional. A tech can also assign themselves when they pick it up.</div>
                   </div>
                   <div class="field wide">
-                    <label>Repair Notes</label>
-                    <textarea name="notes" rows="4">{{r.notes or ''}}</textarea>
-                  </div>
-                  <div class="field wide">
-                    <label>Stage Change Note (optional)</label>
-                    <input name="change_note" placeholder="Why is this RMA moving to a new stage?">
+                    <label>Intake notes</label>
+                    <textarea name="notes" rows="3" placeholder="What the client reported, what came in the box, visible damage, any loaner sent."></textarea>
                   </div>
                 </div>
-                <div class="actions"><button>Save Changes</button></div>
+                <div class="actions">
+                  <button>Create ticket</button>
+                  <a class="btn secondary" href="/repairs">Cancel</a>
+                </div>
               </form>
             </div>
-            <div class="panel">
-              <h2>Stage History</h2>
-              <div class="tablewrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Date (UTC)</th>
-                      <th>From</th>
-                      <th>To</th>
-                      <th>Note</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for h in history %}
-                      <tr>
-                        <td>{{h.changed_at}}</td>
-                        <td>{{h.old_stage or '—'}}</td>
-                        <td>{{h.new_stage}}</td>
-                        <td>{{h.note or ''}}</td>
-                      </tr>
+
+          {# ================================================================== #}
+          {#  TICKET PAGE                                                         #}
+          {# ================================================================== #}
+          {% else %}
+            <div class="head">
+              <div>
+                <h1>{{r.inventory_code or 'Legacy #' ~ r.id}} · {{r.manufacturer or ''}} {{r.model or ''}}</h1>
+                <div class="muted">
+                  RMA {{r.rma}} · {{r.customer}}{% if r.account_owner %} · Sales rep: {{r.account_owner}}{% endif %}
+                  · Received {{r.received_date}}
+                </div>
+              </div>
+              <a href="/repairs">← Back to the queue</a>
+            </div>
+
+            <div class="grid">
+              <div class="card">
+                <span>Stage</span>
+                <strong style="font-size:21px">{{r.stage}}</strong>
+                <div class="muted">
+                  {% if r.stage=='Closed' %}Resolution: {{r.resolution or '—'}}{% else %}Whose turn: {{r.team}}{% endif %}
+                  {% if r.warranty %} · Warranty{% endif %}
+                </div>
+              </div>
+              <div class="card">
+                <span>Days in this stage</span>
+                <strong>
+                  {% if r.age=='closed' %}
+                    <span class="pill closed">Closed</span>
+                  {% elif r.age=='hold' %}
+                    <span class="pill hold">On hold · {{r.stage_days}} d</span>
+                  {% else %}
+                    <span class="pill {{r.age}}">{{r.stage_days}} day{{'' if r.stage_days==1 else 's'}}</span>
+                  {% endif %}
+                </strong>
+                <div class="muted">Yellow after 3 days, red after 7. On-hold stages don't turn red.</div>
+              </div>
+              <div class="card">
+                <span>Total days · Assigned</span>
+                <strong>{{r.total_days}}</strong>
+                <div class="muted">{{r.assigned_name or 'Not assigned'}}</div>
+              </div>
+            </div>
+
+            <div class="guide">
+              <strong>What happens now ({{r.stage}}):</strong> {{guide}}
+            </div>
+
+            {% if moves or all_moves %}
+              <div class="panel">
+                <h2>Move this ticket</h2>
+                <form method="post" action="/repairs/{{r.id}}/move">
+                  <div class="field" style="margin-bottom:12px">
+                    <input name="note" placeholder="Optional note for the work log, e.g. why it's moving or what you're waiting on">
+                  </div>
+                  {% if r.stage in ('Shipped', 'Unrepairable') and 'Closed' in moves %}
+                    <div class="field" style="margin-bottom:12px;max-width:320px">
+                      <label>Resolution when closing</label>
+                      <select name="resolution">
+                        <option value="">Work it out for me</option>
+                        {% for x in resolutions %}
+                          <option>{{x}}</option>
+                        {% endfor %}
+                      </select>
+                      <div class="hint">Left blank: Warranty if ticked, Exchanged from Unrepairable, otherwise Repaired.</div>
+                    </div>
+                  {% endif %}
+                  <div class="moves">
+                    {% for s in moves %}
+                      <button name="stage" value="{{s}}">→ {{s}}</button>
                     {% endfor %}
-                  </tbody>
-                </table>
+                  </div>
+                </form>
+                {% if all_moves %}
+                  <form method="post" action="/repairs/{{r.id}}/move" class="moves" style="margin-top:14px">
+                    <select name="stage" style="max-width:260px" required>
+                      <option value="">Admin: move to any stage…</option>
+                      {% for s in all_moves %}
+                        <option>{{s}}</option>
+                      {% endfor %}
+                    </select>
+                    <input name="note" placeholder="Reason (logged)" style="max-width:320px">
+                    <button class="secondary">Move</button>
+                  </form>
+                  <div class="hint">Admins can skip steps or reopen a closed ticket. Every move is logged.</div>
+                {% endif %}
+              </div>
+            {% else %}
+              <div class="hint" style="margin-bottom:20px">
+                {% if r.stage=='Closed' %}This ticket is closed.{% else %}It's {{r.team}}'s turn; your role can't move it from {{r.stage}}.{% endif %}
+              </div>
+            {% endif %}
+
+            <div class="twocol">
+              <div>
+                <div class="panel">
+                  <h2>Ticket details</h2>
+                  <form method="post" action="/repairs/{{r.id}}/update">
+                    <input type="hidden" name="warranty_form" value="1">
+                    <div class="fields">
+                      <div class="section-title">Client and equipment</div>
+                      <div class="field">
+                        <label>Client</label>
+                        <input name="customer" value="{{client_text}}" required list="client-list" autocomplete="off" {% if not can('rma_create') %}readonly title="Your role can't change the client"{% endif %}>
+                        <datalist id="client-list">
+                          {% for c in client_options() %}
+                            <option value="{{c.client_code}} · {{c.name}}">
+                          {% endfor %}
+                        </datalist>
+                        {% if client and can('client_view') %}
+                          <div class="hint"><a href="/clients/{{client.id}}">Open client record →</a></div>
+                        {% endif %}
+                      </div>
+                      <div class="field">
+                        <label>RMA number</label>
+                        <input name="rma" value="{{r.rma}}" {% if not can('rma_create') %}readonly{% endif %}>
+                        <div class="hint">Ours, or the partner's RMA for an outsourced repair.</div>
+                      </div>
+                      <div class="field">
+                        <label>Manufacturer</label>
+                        <input name="manufacturer" value="{{r.manufacturer or ''}}" placeholder="e.g. GE, Philips">
+                      </div>
+                      <div class="field">
+                        <label>Model</label>
+                        <input name="model" value="{{r.model or ''}}" placeholder="e.g. C1-6-D">
+                      </div>
+                      <div class="field">
+                        <label>Part number</label>
+                        <input name="part_number" value="{{r.part_number or ''}}" placeholder="OEM part number, if known">
+                      </div>
+                      <div class="field">
+                        <label>Serial number</label>
+                        <input name="serial" value="{{r.serial or ''}}">
+                      </div>
+                      <div class="field">
+                        <label>Location</label>
+                        <input name="location" value="{{r.location or ''}}" placeholder="e.g. Repair rack R1">
+                      </div>
+                      <div class="field">
+                        <label>Assigned tech</label>
+                        <select name="assigned_to" {% if not can('repair_assign') %}disabled{% endif %}>
+                          <option value="">Not assigned</option>
+                          {% for t in techs %}
+                            <option value="{{t.username}}" {% if t.username==r.assigned_to %}selected{% endif %}>{{t.name}}</option>
+                          {% endfor %}
+                        </select>
+                        {% if r.technician and not r.assigned_to %}
+                          <div class="hint">Older entry: {{r.technician}}</div>
+                        {% endif %}
+                      </div>
+
+                      <div class="section-title">Evaluation</div>
+                      <div class="field wide">
+                        <label>Eval findings</label>
+                        <textarea name="eval_findings" rows="4" {% if not can('repair_eval') %}readonly{% endif %}
+                          placeholder="What's wrong, what parts it needs, rough labor time. Sales prices the repair from this.">{{r.eval_findings or ''}}</textarea>
+                      </div>
+                      <div class="field wide">
+                        <label class="checkline">
+                          <input type="checkbox" name="warranty" value="1" {% if r.warranty %}checked{% endif %} {% if not (can('repair_eval') or can('repair_price')) %}disabled{% endif %}>
+                          Warranty repair ($0, skips the quote)
+                        </label>
+                        <div class="hint">Tick only if the fault comes from our earlier work on this serial. A new problem is a normal, paid repair.</div>
+                        {% if earlier %}
+                          <select name="warranty_of_id" style="margin-top:8px" {% if not (can('repair_eval') or can('repair_price')) %}disabled{% endif %}>
+                            <option value="">Warranty of which earlier ticket?</option>
+                            {% for m in earlier %}
+                              <option value="{{m.url.split('/')[-1]}}" {% if warranty_of and warranty_of.id|string==m.url.split('/')[-1] %}selected{% endif %}>{{m.code}} · {{m.status}}</option>
+                            {% endfor %}
+                          </select>
+                        {% endif %}
+                      </div>
+
+                      {% if can('view_cost') %}
+                        <div class="section-title">Quote and billing</div>
+                        <div class="field">
+                          <label>Quoted price ($)</label>
+                          <input name="quoted_price" value="{{'%.2f'|format(r.quoted_price) if r.quoted_price is not none else ''}}" placeholder="Set by the sales rep" {% if not can('repair_price') %}readonly{% endif %}>
+                          <div class="hint">What the client is charged. Recording it builds a price history per model.</div>
+                        </div>
+                        <div class="field">
+                          <label>QuickBooks estimate #</label>
+                          <input name="estimate_number" value="{{r.estimate_number or ''}}" placeholder="From QuickBooks" {% if not can('repair_price') %}readonly{% endif %}>
+                        </div>
+                        <div class="field">
+                          <label>QuickBooks invoice #</label>
+                          <input name="invoice_number" value="{{r.invoice_number or ''}}" placeholder="Admin adds this before closing" {% if not can('repair_invoice') %}readonly{% endif %}>
+                        </div>
+                        {% if r.stage=='Closed' %}
+                          <div class="field">
+                            <label>Resolution</label>
+                            <select name="resolution" {% if not can('repair_invoice') %}disabled{% endif %}>
+                              {% for x in resolutions %}
+                                <option {% if x==r.resolution %}selected{% endif %}>{{x}}</option>
+                              {% endfor %}
+                            </select>
+                          </div>
+                        {% endif %}
+                      {% endif %}
+
+                      <div class="section-title">Intake notes</div>
+                      <div class="field wide">
+                        <div class="text" style="white-space:pre-line">{{r.notes or '—'}}</div>
+                        <div class="hint">What came in with the unit. Add anything new as a work-log note instead.</div>
+                      </div>
+                    </div>
+                    <div class="actions">
+                      <button>Save details</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              <div>
+                <div class="panel">
+                  <h2>Work log</h2>
+                  <form method="post" action="/repairs/{{r.id}}/note" style="margin-bottom:12px">
+                    <textarea name="note" rows="2" placeholder="Add a note: a call with the client, a part ordered, carrier and tracking number, partner and their RMA…"></textarea>
+                    <div class="actions" style="margin-top:8px"><button>Add note</button></div>
+                  </form>
+                  <ul class="log">
+                    {% for e in work_log %}
+                      <li>
+                        <div class="when">{{e.at[:16]|replace('T',' ')}} UTC · {{names.get(e.actor, e.actor) if e.actor else 'system'}}</div>
+                        <div>
+                          <span class="kind">{{e.kind}}</span>
+                          {% if e.kind=='stage' %}<strong>{{e.old_stage}} → {{e.new_stage}}</strong>
+                          {% elif e.kind=='created' %}<strong>Received</strong>{% endif %}
+                        </div>
+                        {% if e.text %}<div class="text">{{e.text}}</div>{% endif %}
+                      </li>
+                    {% else %}
+                      <li class="muted">Nothing logged yet.</li>
+                    {% endfor %}
+                  </ul>
+                </div>
+
+                <div class="panel">
+                  <h2>Linked records</h2>
+                  {% if warranty_of %}
+                    <p>Warranty return of <a href="/repairs/{{warranty_of.id}}">{{warranty_of.inventory_code or warranty_of.rma}}</a> ({{warranty_of.stage}})</p>
+                  {% endif %}
+                  {% for x in returns %}
+                    <p>Came back under warranty as <a href="/repairs/{{x.id}}">{{x.inventory_code or x.rma}}</a> ({{x.stage}})</p>
+                  {% endfor %}
+                  {% if same_serial %}
+                    <p class="muted" style="margin-bottom:6px">Other records with serial {{r.serial}} (serials can repeat across manufacturers, so check the model):</p>
+                    <ul style="margin:0;padding-left:18px">
+                      {% for m in same_serial %}
+                        <li><a href="{{m.url}}">{{m.code}}</a> · {{m.kind}} · {{m.manufacturer}} {{m.product}} · {{m.status}}</li>
+                      {% endfor %}
+                    </ul>
+                  {% elif not warranty_of and not returns %}
+                    <p class="muted">No other records for this serial. Loaners and exchanges will link here later.</p>
+                  {% endif %}
+                </div>
               </div>
             </div>
           {% endif %}
-          <div class="foot">Local prototype · Customer-owned RMAs are separate from sellable inventory. Yellow
-            after 3 calendar days; red after 7. Photos, parts usage, QC forms and user permissions are planned
-            for later releases.</div>
+          <div class="foot">Customer repairs are tracked separately from sellable stock. Stage rules and who can move each stage are in repairs.py.</div>
         </main>
       </div>
     </div>

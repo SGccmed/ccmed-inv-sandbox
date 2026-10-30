@@ -56,9 +56,9 @@ ADMIN_ROLES = {"SuperAdmin", "Admin"}
 ROLE_HELP = {
     "SuperAdmin": "Everything, including admin accounts, database restore and backups",
     "Admin": "All inventory, clients, catalog and settings; manages Sales/Shipping/Technician staff",
-    "Sales": "Clients, RMAs and inventory lookups; sees purchase costs",
-    "Shipping": "Receiving, shelf moves, RMAs, and Ready to Ship to Completed",
-    "Technician": "Repair stages up to Ready to Ship, core labor/parts/QC, shelf moves",
+    "Sales": "Clients, repair tickets, pricing and approvals; sees purchase costs",
+    "Shipping": "Receiving, shelf moves, repair tickets, and shipping repairs back",
+    "Technician": "Repair evaluation and repair stages, core labor/parts/QC, shelf moves",
 }
 _SA, _A, _S, _SH, _T = ROLES
 PERMISSIONS = {
@@ -69,7 +69,12 @@ PERMISSIONS = {
     "client_view":    {_SA, _A, _S, _SH},
     "client_edit":    {_SA, _A, _S},
     "rma_create":     {_SA, _A, _S, _SH},
-    "rma_edit":       {_SA, _A, _S, _SH, _T}, # stage moves are limited further by repair_stage_options()
+    "rma_edit":       {_SA, _A, _S, _SH, _T}, # edit ticket details and add work-log notes
+    # Repair tickets (repairs.py). Who may MOVE a ticket depends on whose turn it is: see STAGES in repairs.py.
+    "repair_assign":  {_SA, _A, _T},          # assign a tech to a ticket
+    "repair_eval":    {_SA, _A, _T},          # write eval findings
+    "repair_price":   {_SA, _A, _S},          # quoted price and QuickBooks estimate number
+    "repair_invoice": {_SA, _A},              # invoice number, resolution
     "core_work":      {_SA, _A, _T},          # labor/parts, stage, QC
     "core_convert":   {_SA, _A},
     "catalog_admin":  {_SA, _A},
