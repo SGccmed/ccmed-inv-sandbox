@@ -1,3 +1,6 @@
+# NOT USED YET. The live sandbox runs on the Render free plan, set up by hand
+# (see README). Keep this file for the move to a paid plan with a disk.
+#
 # Render Blueprint: creates the web service and its persistent disk.
 # The database lives on the disk at /var/data, so it survives restarts and redeploys.
 services:
