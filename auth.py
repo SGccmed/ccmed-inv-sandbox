@@ -77,6 +77,7 @@ PERMISSIONS = {
     "repair_equipment_edit": {_SA, _A, _S, _SH},  # correct manufacturer, model, part number, serial on a ticket
     "restricted_stock": {_SA, _A, _S, _SH},   # Sold archive, Loaners and Rental lists (not needed by the repair team)
     "cost_adjust":    {_SA, _A},              # adjust a recorded cost or price, with a reason
+    "inventory_value": {_SA, _A},             # total stock value tiles on the home page
     # Repair tickets (repairs.py). Who may MOVE a ticket depends on whose turn it is: see STAGES in repairs.py.
     "repair_assign":  {_SA, _A, _T},          # assign a tech to a ticket
     "repair_eval":    {_SA, _A, _T},          # write eval findings
@@ -232,18 +233,24 @@ USER_BLOCK = """<div style="margin-top:auto;padding:16px 13px 0;border-top:1px s
 <form method="post" action="/view-as" style="margin:6px 0 0"><input type="hidden" name="role" value=""><input type="hidden" name="next" value="{{ request.full_path }}"><button style="background:#3a2a00;color:#fff;border:0;border-radius:6px;padding:5px 9px;cursor:pointer;font:inherit;font-size:12px;margin:0">Back to SuperAdmin</button></form></div>{% endif %}
 Signed in as <b style="color:#fff">{{ g.user.username }}</b><br><span>{{ (g.user.roles or 'View only').replace(',', ' · ') }}</span><br>
 <a href="/account/password" style="color:#dce9f4;padding:6px 0;display:inline">Change password</a>
-{% if can('users_manage') %} · <a href="/users" style="color:#dce9f4;padding:6px 0;display:inline">Users</a>{% endif %}
 {% if g.real_superadmin and not g.viewing_as %}<form method="post" action="/view-as" style="margin:8px 0 0;display:flex;gap:6px"><input type="hidden" name="next" value="{{ request.full_path }}"><select name="role" style="flex:1;min-width:0;padding:5px;border-radius:6px;border:0;font:inherit;font-size:12px"><option value="">View as…</option><option>Admin</option><option>Sales</option><option>Shipping</option><option>Technician</option></select><button style="background:#2b5f88;color:#fff;border:0;border-radius:6px;padding:5px 9px;cursor:pointer;font:inherit;font-size:12px;margin:0">Go</button></form>{% endif %}
 <form method="post" action="/logout" style="margin:8px 0 0"><button style="background:#2b5f88;color:#fff;border:0;border-radius:7px;padding:7px 12px;cursor:pointer;font:inherit;margin:0">Sign out</button></form>{% endif %}
 </div>"""
 
 
 SEARCH_BOX = (Path(__file__).resolve().parent / "search_box.html").read_text(encoding="utf-8")
+SIDEBAR = (Path(__file__).resolve().parent / "sidebar.html").read_text(encoding="utf-8")         # one sidebar for every page
 PAGE_TOOLS = (Path(__file__).resolve().parent / "page_tools.html").read_text(encoding="utf-8")   # rich text + cost checks
 
 
 def add_user_block(template_html):
-    """Add the search box under the sidebar title, the shared page tools, and the signed-in user panel."""
+    """Add the shared sidebar (with the search box, page tools and signed-in user panel) to a page.
+
+    Pages mark the spot with <!--sidebar-->. Older pages with their own <aside> still get the search box
+    and user panel added to it."""
+    if "<!--sidebar-->" in template_html:
+        side = SIDEBAR.replace("<!--search-->", SEARCH_BOX, 1).replace("<!--tools-->", PAGE_TOOLS + USER_BLOCK, 1)
+        return template_html.replace("<!--sidebar-->", side, 1)
     if "<!--search-->" in template_html:
         return template_html.replace("<!--search-->", SEARCH_BOX, 1).replace("</aside>", PAGE_TOOLS + USER_BLOCK + "</aside>", 1)
     m = re.search(r"<aside[^>]*>.*?(</h2>|</small></div>)", template_html, re.S)
@@ -272,11 +279,14 @@ th{font-size:12px;color:#667a8e}a{color:#245d86}.muted{color:#697b8d;font-size:1
 </style></head><body><div class="wrap"><div class="brand">CC Medical Inventory</div>
 {% with msgs=get_flashed_messages() %}{% for m in msgs %}<div class="msg">{{ m }}</div>{% endfor %}{% endwith %}
 {{ body|safe }}</div></body></html>"""
+SIMPLE_PAGE_WITH_SIDEBAR = add_user_block(SIMPLE_PAGE.replace("<body>", "<body><!--sidebar-->", 1))
 
 
 def simple_page(title, body, width=None, **ctx):
     inner = render_template_string(body, **ctx)
-    return render_template_string(SIMPLE_PAGE, title=title, body=inner, width=width)
+    # Signed-in pages (Users, Change password, Restore, Not allowed) get the shared sidebar; sign-in pages don't.
+    template = SIMPLE_PAGE_WITH_SIDEBAR if g.get("user") and title not in ("Sign in", "Signed out") else SIMPLE_PAGE
+    return render_template_string(template, title=title, body=inner, width=width)
 
 
 # --- Routes ----------------------------------------------------------------

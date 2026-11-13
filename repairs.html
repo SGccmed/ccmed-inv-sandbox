@@ -568,30 +568,7 @@
   </head>
   <body>
     <div class="shell">
-      <aside class="sidebar">
-        <a href="/" class="brandlink"><div class="brand">CC Medical<small>Inventory Workspace</small></div></a>
-        <!--search-->
-        <div class="label">Inventory</div>
-        <a class="nav" href="/">Home</a>
-        {% if can('receive') %}
-          <a class="nav" href="/inventory/new">+ New Inventory</a>
-        {% endif %}
-        {% if can('client_view') %}
-          <a class="nav" href="/clients">Customers</a>
-        {% endif %}
-        <a class="nav" href="/products">Product Database</a>
-        <a class="nav" href="/cores">Core Repairs (CR)</a>
-        <a class="nav" href="/inventory?view=Active">Active Inventory</a>
-        {% if can('restricted_stock') %}<a class="nav" href="/inventory?view=Sold%20archive">Sold Archive</a>{% endif %}
-        <a class="nav active" href="/repairs">Customer Repairs</a>
-        {% if can('restricted_stock') %}
-          <a class="nav" href="/inventory?view=On%20loan">Loaners</a>
-          <a class="nav" href="/inventory?view=Rental">Rental</a>
-        {% endif %}
-        <a class="nav" href="/inventory?view=Pending%20review">Pending</a>
-        <a class="nav" href="/inventory?view=Needs%20review">Needs Review</a>
-        <a class="nav" href="/inventory?view=All">All Records</a>
-      </aside>
+      <!--sidebar-->
       <div class="main">
         <header class="top">Customer Repairs / Repair Tickets</header>
         <main class="content">

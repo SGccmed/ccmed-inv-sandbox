@@ -232,6 +232,14 @@
         gap: 9px;
         flex-wrap: wrap
       }
+      .viewpick {
+        padding: 9px 10px;
+        border: 1px solid #cdd9e4;
+        border-radius: 8px;
+        font: inherit;
+        font-weight: 600;
+        background: #ffffff
+      }
       .search {
         flex: 1;
         min-width: 230px
@@ -458,34 +466,7 @@
   </head>
   <body>
     <div class="shell">
-      <aside class="sidebar">
-        <a href="/" class="brandlink"><div class="brand">CC Medical<small>Inventory Workspace</small></div></a>
-        <!--search-->
-        <div class="navlabel">Inventory</div>
-        <a class="sideitem" href="/">Home</a>
-        {% if can('receive') %}
-          <a class="sideitem" href="/inventory/new">+ New Inventory</a>
-        {% endif %}
-        {% if can('client_view') %}
-          <a class="sideitem" href="/clients">Customers</a>
-        {% endif %}
-        <a class="sideitem" href="/products">Product Database</a>
-        <a class="sideitem" href="/cores">Core Repairs (CR)</a>
-        <nav class="navlinks">
-          {% for k,n in [('Active','Active Inventory'),
-              ('Sold archive','Sold Archive'),
-              ('On loan','Loaners'),
-              ('Rental','Rental'),
-              ('Pending review','Pending'),
-              ('Needs review','Needs Review'),
-              ('All','All Records')] if can('restricted_stock') or k not in hidden_statuses %}
-            <a class="sideitem {% if view==k %}selected{% endif %}" href="/inventory?view={{k|urlencode}}"><span>{{n}}</span>{% if overview %}<span class="count">{{all_count if k=='All' else (overview.get('Active',0)+(overview.get('Rental',0) if can('restricted_stock') else 0) if k=='Active' else overview.get(k,0))}}</span>{% endif %}</a>
-            {% if k=='Active' %}
-              <a class="sideitem" href="/repairs"><span>Customer Repairs</span></a>
-            {% endif %}
-          {% endfor %}
-        </nav>
-      </aside>
+      <!--sidebar-->
       <div class="workspace">
         <header class="topbar"><strong>Inventory / Overview</strong><span>CC Medical · Local
           application</span></header>
@@ -654,14 +635,22 @@
             <div class="section">
               <div class="sectionhead">
                 <div>
-                  <h2>{{'Active Inventory' if view=='Active' else view}} Records</h2>
-                  <p>{{total}} matching records{% if can('view_cost') %} · {{priced}} with recorded costs ·
-                    ${{'{:,.0f}'.format(value)}} recorded cost subtotal (not accounting
-                    valuation){% endif %}</p>
+                  <h2>{{ {'Active': 'Active Inventory', 'Sold archive': 'Sold', 'All': 'All Inventory', 'On loan': 'Loaners'}.get(view, view) }}</h2>
+                  <p>{{total}} matching records</p>
                 </div>
               </div>
               <form class="toolbar">
-                <input type="hidden" name="view" value="{{view}}">
+                {# Which list: Active (default), Sold or All. Loaners, Rental, Pending and Needs Review are in the sidebar. #}
+                <select name="view" class="viewpick" onchange="this.form.submit()" aria-label="Which inventory to show">
+                  <option value="Active" {% if view=='Active' %}selected{% endif %}>Active ({{ overview.get('Active',0) + (overview.get('Rental',0) if can('restricted_stock') else 0) }})</option>
+                  {% if can('restricted_stock') %}
+                    <option value="Sold archive" {% if view=='Sold archive' %}selected{% endif %}>Sold ({{ overview.get('Sold archive',0) }})</option>
+                  {% endif %}
+                  <option value="All" {% if view=='All' %}selected{% endif %}>All ({{ all_count }})</option>
+                  {% if view not in ('Active', 'Sold archive', 'All') %}
+                    <option value="{{view}}" selected>{{ {'On loan': 'Loaners'}.get(view, view) }} ({{ total }})</option>
+                  {% endif %}
+                </select>
                 {% if sort %}<input type="hidden" name="sort" value="{{sort}}"><input type="hidden" name="dir" value="{{sdir}}">{% endif %}
                 <input class="search" name="q" value="{{q}}" placeholder="Search part number, serial, location, notes…"><button>Search</button><a class="btn light" href="/inventory?view={{view|urlencode}}">Clear</a>
               </form>

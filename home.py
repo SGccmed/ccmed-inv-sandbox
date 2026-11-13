@@ -84,6 +84,14 @@ def register_home_routes(app, conn, base_dir):
             if red:
                 tiles.append({'label': f'{team}: over 7 days', 'count': len(red), 'hint': 'Oldest first',
                               'url': '/repairs?' + urlencode({'queue': team, 'sort': 'in_stage', 'dir': 'asc'}), 'tone': 'red'})
+        if can('inventory_value'):
+            # Admin only: what the stock on hand and out on loan/rental cost us (recorded costs, not a valuation).
+            for label, statuses, url in (('Active stock value', ('Active',), '/inventory'),
+                                         ('Loaned / rented out', ('On loan', 'Rental'), '/inventory?view=On%20loan')):
+                marks = ','.join('?' * len(statuses))
+                v = c.execute(f'SELECT COUNT(*), COALESCE(SUM(cost),0), COUNT(cost) FROM units WHERE status IN ({marks})', statuses).fetchone()
+                hint = f"{v[0]} items" + (f" · {v[0] - v[2]} without a cost" if v[0] - v[2] else '')
+                tiles.append({'label': label, 'count': f'${v[1]:,.0f}', 'hint': hint, 'url': url, 'tone': ''})
         if can('core_work'):
             n = c.execute("SELECT COUNT(*) FROM core_items WHERE stage IN ('Needs Repair','In Repair')").fetchone()[0]
             tiles.append({'label': 'Cores to work on', 'count': n, 'hint': 'Needs Repair or In Repair', 'url': '/cores', 'tone': ''})

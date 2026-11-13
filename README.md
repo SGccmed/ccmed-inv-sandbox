@@ -8,6 +8,16 @@ Internal web app for tracking CC Medical's ultrasound equipment: stock, cores, c
 
 The **home page** (click **CC Medical** at the top left of any page) has a big search bar, quick links, counts of what's waiting on you, your **Favorites** (☆ Favorite at the top right of any page) and the records you opened recently.
 
+**The sidebar** is the same on every page, in the same order, with the current page highlighted:
+
+- **Home**, **+ New Inventory**
+- **Inventory**: opens Active stock, with a drop-down to switch to Sold or All. **Loaners**, **Rental**, **Pending** and **Needs Review** show how many items each holds; Pending turns yellow and Needs Review red when they have any.
+- **Repairs**: Customer Repairs (RP) and Core Repairs (CR), each with its number of open tickets or cores.
+- **Reference**: Customers, Product Database.
+- **Admin** (Admins only): Users, Admin Mode.
+
+Links a role can't use aren't shown (technicians don't see Loaners or Rental). The total recorded cost of stock (active, and out on loan or rental) is on the **home page for Admins and SuperAdmins** only.
+
 | Area | What it tracks | ID format |
 |---|---|---|
 | Stock (CC) | Units we own: shelf location, cost, status | `CC-MMDDYY-###` |
@@ -33,6 +43,7 @@ Every page needs a staff login. Serial numbers are **not** unique keys: a matchi
 | `trix.js`, `trix.css` | Trix rich text editor (open source, MIT licence, by 37signals), served by the app itself |
 | `repairs.py` | Customer repair tickets: the stages, who can move each one, queues, work log |
 | `search.py` | Search across customers, tickets, stock and cores |
+| `sidebar.html` | The one sidebar used on every page (items, counts, highlighting) |
 | `search_box.html` | The search box shown at the top of every sidebar |
 | `salesforce.py` | Linking customers to their Salesforce Account IDs (CSV import) |
 | `auth.py` | Logins, roles and permissions (`PERMISSIONS`), the Users page, loading staff accounts |

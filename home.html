@@ -624,23 +624,7 @@
   </head>
   <body>
     <div class="shell">
-      <aside class="sidebar">
-        <a href="/" class="brandlink"><div class="brand">CC Medical<small>Inventory Workspace</small></div></a>
-        <!--search-->
-        <div class="label">Inventory</div>
-        <a class="nav active" href="/">Home</a>
-        {% if can('receive') %}
-          <a class="nav" href="/inventory/new">+ New Inventory</a>
-        {% endif %}
-        {% if can('client_view') %}
-          <a class="nav" href="/clients">Customers</a>
-        {% endif %}
-        <a class="nav" href="/products">Product Database</a>
-        <a class="nav" href="/cores">Core Repairs (CR)</a>
-        <a class="nav" href="/repairs">Customer Repairs</a>
-        <a class="nav" href="/inventory?view=Active">Active Inventory</a>
-        <a class="nav" href="/inventory?view=All">All Records</a>
-      </aside>
+      <!--sidebar-->
       <div class="main">
         <header class="top">Home</header>
         <main class="content">

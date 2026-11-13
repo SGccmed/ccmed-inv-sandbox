@@ -118,7 +118,7 @@ RESULTS_PAGE = '''
 
 
 def register_search_routes(app, conn):
-    layout = CL.LAYOUT.replace('<a class="active" href="/clients">', '<a href="/clients">')
+    layout = CL.LAYOUT          # same page frame and shared sidebar as the Customers pages
 
     @app.get('/api/search')
     def search_api():

@@ -312,6 +312,18 @@ import search, salesforce  # search box and results (search.py); Salesforce ID m
 import cores, formatting  # core repairs and ticket updates (cores.py); Pacific dates and note formatting (formatting.py)
 import home, costs  # home page, favorites and recent pages (home.py); cost adjustments with a reason (costs.py)
 formatting.register_formatting(app)
+@app.context_processor
+def sidebar_helpers():
+ # Counts for the shared sidebar (sidebar.html): stock per status, open repair tickets, open cores.
+ def sidebar_counts():
+  c=conn()
+  try:
+   n={r[0]:r[1] for r in c.execute('SELECT status,COUNT(*) FROM units GROUP BY status')}
+   n['repairs']=c.execute("SELECT COUNT(*) FROM customer_repairs WHERE stage<>'Closed'").fetchone()[0]
+   n['cores']=c.execute("SELECT COUNT(*) FROM core_items WHERE stage<>'Converted to Stock'").fetchone()[0]
+   return n
+  finally:c.close()
+ return {'sidebar_counts':sidebar_counts}
 choices.register_choices(app)
 @app.get('/assets/<name>')
 def asset(name):

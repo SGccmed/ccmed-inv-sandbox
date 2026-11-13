@@ -161,19 +161,7 @@
   </head>
   <body>
     <div class="shell">
-      <aside>
-        <h2><a class="brandlink" href="/">CC Medical</a></h2>
-        <!--search-->
-        <a href="/">Home</a>
-        <a href="/inventory">Inventory Dashboard</a>
-        <a class="active" href="/inventory/new">+ New Inventory</a>
-        {% if can('client_view') %}
-          <a href="/clients">Customers</a>
-        {% endif %}
-        <a class="sideitem" href="/products">Product Database</a>
-        <a href="/cores">Core Repairs (CR)</a>
-        <a href="/repairs">Customer Repairs (RP)</a>
-      </aside>
+      <!--sidebar-->
       <main>
         <h1>New Inventory Entry</h1>
         <div class="muted">Add one item or several items together. Each item receives its own CC, RP or CR

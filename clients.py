@@ -173,7 +173,7 @@ def serial_matches(c, serial, exclude=None):
 
 STYLE = '''<style>*{box-sizing:border-box}body{margin:0;background:#f3f6fa;color:#1b3043;font:14px/1.5 system-ui,Segoe UI,Arial,sans-serif}
 aside{width:220px;background:#112a42;min-height:100vh;padding:22px 15px;position:fixed;display:flex;flex-direction:column}aside a{display:block;color:#dce9f4;padding:11px;text-decoration:none;border-radius:7px}aside a:hover,aside a.active{background:#2b5f88}aside h2{color:white;margin:0 0 12px 11px}
-main{margin-left:220px;padding:28px 32px;max-width:1500px}h1{margin:0 0 4px;font-size:26px}h2{font-size:17px;margin:0 0 12px}
+main{margin-left:0;padding:28px 32px;max-width:1500px}h1{margin:0 0 4px;font-size:26px}h2{font-size:17px;margin:0 0 12px}
 section,.panel{background:white;border:1px solid #dfe7ef;border-radius:12px;padding:20px;margin:16px 0}
 input,select,textarea{padding:9px;border:1px solid #cbd8e2;border-radius:7px;font:inherit;width:100%}
 button,.btn{background:#245d86;color:white;border:0;border-radius:7px;padding:9px 14px;cursor:pointer;text-decoration:none;display:inline-block;font:inherit;white-space:nowrap}
@@ -188,7 +188,7 @@ a{color:#245d86}label{display:block;margin:0 0 4px;font-weight:600;font-size:12p
 @media(max-width:900px){aside{position:static;width:auto;min-height:0}main{margin:0;padding:15px}.grid,.cards{grid-template-columns:1fr 1fr}.grid .wide{grid-column:span 2}}
 @media(max-width:560px){.grid,.cards{grid-template-columns:1fr}.grid .wide{grid-column:span 1}dl{grid-template-columns:1fr}}</style>'''
 LAYOUT = add_user_block('''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CC Medical | Customers</title>''' + STYLE + '''</head><body>
-<aside><h2><a class="brandlink" href="/">CC Medical</a></h2><!--search--><a href="/">Home</a><a href="/inventory">Inventory Dashboard</a>{% if can('receive') %}<a href="/inventory/new">+ New Inventory</a>{% endif %}<a class="active" href="/clients">Customers</a><a href="/products">Product Database</a><a href="/cores">Core Repairs (CR)</a><a href="/repairs">Customer Repairs (RP)</a></aside>
+<!--sidebar-->
 <main>{% with msgs=get_flashed_messages() %}{% for m in msgs %}<div class="msg">{{m}}</div>{% endfor %}{% endwith %}{{body|safe}}</main></body></html>''')
 
 
