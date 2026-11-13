@@ -67,7 +67,7 @@ PERMISSIONS = {
     "view_cost":      {_SA, _A, _S},          # purchase / repair costs and totals
     "receive":        {_SA, _A, _SH},         # New Inventory
     "move":           {_SA, _A, _SH, _T},     # shelf transfers
-    "unit_repair":    {_SA, _A, _T},          # internal repair record on a stock item
+    "send_to_repair": {_SA, _A, _S, _SH},     # v1.15: open a core ticket for a stock item (replaced "unit_repair")
     "client_view":    {_SA, _A, _S, _SH},
     "client_edit":    {_SA, _A, _S},
     "client_import":  {_SA, _A},              # link clients to Salesforce IDs from a CSV
@@ -297,7 +297,7 @@ def simple_page(title, body, width=None, **ctx):
 ENDPOINT_PERMISSIONS = {
     ("inventory_new", "*"): "receive",
     ("transfer", "POST"): "move",
-    ("repair", "POST"): "unit_repair",
+    ("send_to_repair", "POST"): "send_to_repair",
     ("repair_new", "*"): "rma_create",
     ("repair_update", "POST"): "rma_edit",
     ("core_update", "POST"): "core_work",

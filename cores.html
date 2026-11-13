@@ -622,7 +622,7 @@
                 <a href="/cores?stage={{s|urlencode}}" class="{% if stage==s %}on{% endif %}">
                   <span>{{s}}</span>
                   <strong>{{counts.get(s,0)}}</strong>
-                  <small>{% if stages[s].hold %}on hold{% elif s=='Converted to Stock' %}done{% else %}&nbsp;{% endif %}</small>
+                  <small>{% if stages[s].hold %}on hold{% elif s in ('Converted to Stock', 'Returned to Stock') %}done{% else %}&nbsp;{% endif %}</small>
                 </a>
               {% endfor %}
             </div>
@@ -705,7 +705,7 @@
                   <span>Cost summary</span>
                   <strong>${{'{:,.2f}'.format(total)}}</strong>
                   <div class="muted">
-                    Purchase ${{'{:,.2f}'.format(detail.original_cost)}} · Parts ${{'{:,.2f}'.format(parts)}} · Other ${{'{:,.2f}'.format(other)}}
+                    {% if from_unit %}Repair of a stock item{% else %}Purchase ${{'{:,.2f}'.format(detail.original_cost)}}{% endif %} · Parts ${{'{:,.2f}'.format(parts)}} · Other ${{'{:,.2f}'.format(other)}}
                   </div>
                 </div>
               {% else %}
@@ -716,8 +716,16 @@
               {% endif %}
             </div>
 
+            {% if from_unit %}
+              <div class="panel">
+                <strong>Repair of our stock item</strong>
+                <a href="/unit/{{from_unit.id}}">{{from_unit.inventory_code or 'stock item #' ~ from_unit.id}}</a> ({{from_unit.product_raw}}).
+                <span class="muted">Its cost stays on the stock item; the repair costs here are added to it when it's returned to stock.</span>
+              </div>
+            {% endif %}
             <div class="guide">
-              <strong>What happens now ({{detail.stage}}):</strong> {{guide}}
+              <strong>What happens now ({{detail.stage}}):</strong>
+              {% if from_unit and detail.stage=='Ready for Stock' %}Fixed and tested; the update that set this status is the QC sign-off. An Admin returns it to stock: the same stock item goes back on a shelf with these costs added.{% else %}{{guide}}{% endif %}
             </div>
 
             {% if detail.stage=='Converted to Stock' %}
@@ -725,8 +733,28 @@
                 <strong>Converted to stock</strong> as
                 <a href="/unit/{{detail.converted_unit_id}}">stock item #{{detail.converted_unit_id}}</a>. This core can't be changed.
               </div>
+            {% elif detail.stage=='Returned to Stock' %}
+              <div class="panel">
+                <strong>Returned to stock</strong> on shelf {{detail.location or '—'}}{% if from_unit %} as
+                <a href="/unit/{{from_unit.id}}">{{from_unit.inventory_code or 'stock item #' ~ from_unit.id}}</a>{% endif %}. This ticket can't be changed.
+              </div>
             {% else %}
-              {% if detail.stage=='Ready for Stock' and can('core_convert') %}
+              {% if detail.stage=='Ready for Stock' and can('core_convert') and from_unit %}
+                <div class="panel">
+                  <form method="post" action="/cores/{{detail.id}}/return"
+                    style="display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap">
+                    <div style="flex:1;min-width:240px">
+                      <strong>Ready to return to stock.</strong>
+                      <span class="muted">{{from_unit.inventory_code}} goes back on the shelf you pick{% if can('view_cost') %}, with ${{'{:,.2f}'.format(total)}} of repair costs added to its cost{% endif %}.</span>
+                    </div>
+                    <div style="min-width:180px">
+                      <label>Back to shelf</label>
+                      <input name="location" data-combo="dl-locations" data-strict required autocomplete="off" placeholder="Pick a shelf">
+                    </div>
+                    <button>Return to stock</button>
+                  </form>
+                </div>
+              {% elif detail.stage=='Ready for Stock' and can('core_convert') %}
                 <div class="panel">
                   <form method="post" action="/cores/{{detail.id}}/convert" onsubmit="return confirm('Convert this core into a new CC stock item?')"
                     style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
@@ -811,7 +839,7 @@
             {% if can('cost_adjust') or adjustments %}
               <div class="panel">
                 <h2>Cost adjustments</h2>
-                {% if can('cost_adjust') and detail.stage!='Converted to Stock' %}
+                {% if can('cost_adjust') and detail.stage not in ('Converted to Stock', 'Returned to Stock') %}
                   <p class="muted" style="margin-top:0">Admins only. Corrects a recorded cost; the old and new amounts and your reason are kept here.</p>
                   <form method="post" action="/adjust-cost" class="adjust-form">
                     <input type="hidden" name="back" value="/cores/{{detail.id}}">

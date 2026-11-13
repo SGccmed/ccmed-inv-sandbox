@@ -7,6 +7,7 @@ from auth import register_auth,ensure_user_schema,create_user,add_user_block,val
 from clients import register_client_routes,ensure_client_schema,resolve_client,serial_matches,serial_key,client_label
 import repairs as R  # customer repair tickets: stages, queues, work log (repairs.py)
 import choices  # the location and manufacturer pick lists (choices.py)
+import history  # product history on the stock item page, Send to repair (history.py, v1.15)
 now_iso=R.now_iso
 BASE=Path(__file__).resolve().parent
 # The database location can be changed with the CCM_DB_PATH environment variable.
@@ -185,7 +186,7 @@ def inventory_new():
   seen.setdefault(k,i)
  try:
   c.execute('BEGIN IMMEDIATE')
-  batch=c.execute('INSERT INTO receiving_batches(created_at,item_count) VALUES (?,?)',(now_iso(),len(rows))).lastrowid
+  batch=c.execute('INSERT INTO receiving_batches(created_at,item_count,created_by) VALUES (?,?,?)',(now_iso(),len(rows),g.user['username'])).lastrowid
   codes=[]
   for row in rows:
    typ=row['type'];code=new_inventory_code(c,typ);codes.append(code)
@@ -197,12 +198,12 @@ def inventory_new():
     if not row['pid']:
      review=NOT_IN_CATALOG
      if status=='Active':status='Needs review'
-    c.execute("""INSERT INTO units(manufacturer,product_raw,product_key,serial,cost,dom,notes,location_raw,physical_location,status,condition,review,inventory_code,supplier,received_date,entry_batch_id,product_id)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-     (row['manufacturer'],row['product'],norm(row['product']),row['serial'],row['cost_value'],'',row['notes'],row['location'],row['location'],status,row['condition'] or 'Unspecified',review,code,None,received,batch,row['pid']))
+    c.execute("""INSERT INTO units(manufacturer,product_raw,product_key,serial,cost,dom,notes,location_raw,physical_location,status,condition,review,inventory_code,supplier,received_date,entry_batch_id,product_id,received_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+     (row['manufacturer'],row['product'],norm(row['product']),row['serial'],row['cost_value'],'',row['notes'],row['location'],row['location'],status,row['condition'] or 'Unspecified',review,code,None,received,batch,row['pid'],g.user['username']))
    elif typ=='CR':
-    c.execute("""INSERT INTO core_items(inventory_code,manufacturer,product_raw,serial,location,supplier,original_cost,notes,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?)""",(code,row['manufacturer'],row['product'],row['serial'],row['location'],None,row['cost_value'],row['notes'],now_iso()))
+    c.execute("""INSERT INTO core_items(inventory_code,manufacturer,product_raw,serial,location,supplier,original_cost,notes,created_at,received_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?)""",(code,row['manufacturer'],row['product'],row['serial'],row['location'],None,row['cost_value'],row['notes'],now_iso(),g.user['username']))
    else:
     # Customer repair ticket (see repairs.py); a blank RMA gets the next RMA-##### number.
     R.create_ticket(c,client=row['client'],rma=row['rma'],received=received,code=code,
@@ -251,13 +252,14 @@ def index():
 def unit(uid):
  c=conn();u=c.execute('SELECT * FROM units WHERE id=?',(uid,)).fetchone()
  if not u:c.close();return 'Not found',404
- moves=c.execute('SELECT * FROM movements WHERE unit_id=? ORDER BY id DESC',(uid,)).fetchall()
- unit_repairs=c.execute('SELECT * FROM repair_orders WHERE unit_id=? ORDER BY id DESC',(uid,)).fetchall()
- same=serial_matches(c,u['serial'],exclude=('unit',uid))
+ # v1.15: one Product history (newest first) instead of separate location/repair lists; the core this item came
+ # from and its own repair tickets aren't flagged as "same serial" (see history.py).
+ rel=history.related(c,u);events=history.timeline(c,u,rel)
  product=c.execute('SELECT id,display_name FROM products WHERE id=?',(u['product_id'],)).fetchone() if u['product_id'] else None
  adjustments=costs.adjustments_for(c,f'/unit/{uid}') if can('view_cost') else []
  c.close()
- return render_template_string(TEMPLATE,view=u['status'],unit=u,overview={},all_count=0,movements=moves,unit_repairs=unit_repairs,same_serial=same,adjustments=adjustments,product=product)
+ return render_template_string(TEMPLATE,view=u['status'],unit=u,overview={},all_count=0,events=events,now_line=history.now_line(u,rel),rel=rel,
+  same_serial=rel['others'],adjustments=adjustments,product=product)
 @app.post('/transfer/<int:uid>')
 def transfer(uid):
  # The new location must come from the list (choices.py). Loan and Rental also change the status;
@@ -268,13 +270,24 @@ def transfer(uid):
  c=conn();u=c.execute('SELECT physical_location,status FROM units WHERE id=?',(uid,)).fetchone()
  if not u or u['status']=='Sold archive':c.close();return 'Sold records cannot be transferred',400
  if (u['status'] in HIDDEN_STATUSES or status in HIDDEN_STATUSES) and not can('restricted_stock'):c.close();flash('Loaner and rental items are moved by Shipping or Sales.');return redirect(url_for('unit',uid=uid))
- c.execute('INSERT INTO movements(unit_id,old_location,new_location,note) VALUES (?,?,?,?)',(uid,u['physical_location'],new,(request.form.get('note','').strip()+' ['+g.user['username']+']').strip()));c.execute('UPDATE units SET physical_location=?,status=? WHERE id=?',(new,status,uid));c.commit();c.close()
+ c.execute('INSERT INTO movements(unit_id,old_location,new_location,note,actor) VALUES (?,?,?,?,?)',(uid,u['physical_location'],new,request.form.get('note','').strip(),g.user['username']));c.execute('UPDATE units SET physical_location=?,status=? WHERE id=?',(new,status,uid));c.commit();c.close()
  flash('Transfer recorded'+(f' · status now {status}' if status!=u['status'] else ''));return redirect(url_for('unit',uid=uid))
-@app.post('/repair/<int:uid>')
-def repair(uid):
- c=conn();u=c.execute('SELECT status FROM units WHERE id=?',(uid,)).fetchone()
- if not u or u['status']=='Sold archive':c.close();return 'Sold records cannot receive new repairs in this prototype',400
- c.execute('INSERT INTO repair_orders(unit_id,repair_type,notes) VALUES (?,?,?)',(uid,request.form.get('type'),(request.form.get('notes','').strip()+' ['+g.user['username']+']').strip()));c.commit();c.close();flash('Repair record created');return redirect(url_for('unit',uid=uid))
+@app.post('/unit/<int:uid>/send-to-repair')
+def send_to_repair(uid):
+ # v1.15 (replaces the old "repair record" box): opens a core ticket linked to this stock item and moves it to
+ # the Repair location. Admin, Sales and Shipping (permission send_to_repair); technicians work what's sent in.
+ c=conn();u=c.execute('SELECT * FROM units WHERE id=?',(uid,)).fetchone()
+ if not u:c.close();return 'Not found',404
+ if u['status']=='Sold archive':c.close();flash('Sold items cannot be sent to repair.');return redirect(url_for('unit',uid=uid))
+ if history.related(c,u)['open_core']:c.close();flash('This item already has an open repair ticket.');return redirect(url_for('unit',uid=uid))
+ reason=request.form.get('reason','').strip()
+ if not reason:c.close();flash("Say what's wrong before sending it to repair.");return redirect(url_for('unit',uid=uid))
+ try:
+  c.execute('BEGIN IMMEDIATE');cid,code=history.send_to_repair(c,u,reason[:500],g.user['username'],new_inventory_code);c.commit()
+ except sqlite3.Error as e:
+  c.rollback();c.close();flash('Not sent to repair: '+str(e));return redirect(url_for('unit',uid=uid))
+ c.close();flash(f'Sent to repair as {code}. It is in the Core Repairs queue; the item is now at the Repair location.')
+ return redirect(url_for('unit',uid=uid))
 @app.get('/admin/backup')
 def backup_download():
  # Admins can download a consistent copy of the whole database.
@@ -347,7 +360,7 @@ def sidebar_helpers():
   try:
    n={r[0]:r[1] for r in c.execute('SELECT status,COUNT(*) FROM units GROUP BY status')}
    n['repairs']=c.execute("SELECT COUNT(*) FROM customer_repairs WHERE stage<>'Closed'").fetchone()[0]
-   n['cores']=c.execute("SELECT COUNT(*) FROM core_items WHERE stage<>'Converted to Stock'").fetchone()[0]
+   n['cores']=c.execute("SELECT COUNT(*) FROM core_items WHERE stage NOT IN ('Converted to Stock','Returned to Stock')").fetchone()[0]
    return n
   finally:c.close()
  return {'sidebar_counts':sidebar_counts}
@@ -366,7 +379,7 @@ costs.register_cost_routes(app,conn)
 
 def init_db():
  c=conn()
- c.executescript(SCHEMA);R.ensure_repair_schema(c);ensure_entry_schema(c);cores.ensure_core_schema(c);ensure_user_schema(c);ensure_client_schema(c);home.ensure_home_schema(c);costs.ensure_cost_schema(c);ensure_product_schema(c)
+ c.executescript(SCHEMA);R.ensure_repair_schema(c);ensure_entry_schema(c);cores.ensure_core_schema(c);ensure_user_schema(c);ensure_client_schema(c);home.ensure_home_schema(c);costs.ensure_cost_schema(c);ensure_product_schema(c);history.ensure_history_schema(c)
  c.execute("UPDATE units SET status='Rental' WHERE UPPER(TRIM(location_raw))='RENTAL' AND status='On loan'")
  # On a host without a console, the first admin can come from environment variables.
  # This only runs while there are no users at all.

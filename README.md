@@ -36,6 +36,7 @@ Every page needs a staff login. Serial numbers are **not** unique keys: a matchi
 | `app.py` | Main app: stock list (`/inventory`), receiving, backup/restore, spreadsheet import |
 | `home.py`, `home.html` | Home page: search, work tiles, favorites and recent pages |
 | `choices.py` | The pick lists: inventory locations and manufacturers (both locked). Edit the lists here to add or rename one |
+| `history.py` | The stock item's Product history (newest first) and Send to repair |
 | `costs.py` | Cost adjustments (Admins): corrects a cost or quoted price with a required reason, keeps the history |
 | `cores.py` | Core repairs: ticket updates, statuses, costs, converting to stock |
 | `formatting.py` | Pacific-time dates ("Oct 30, 2026"), safe display of rich text notes, work hours, sortable column headers |
@@ -116,6 +117,14 @@ A core is worked like a ticket. Technicians post **ticket updates**: the day wor
 | On Hold | Paused for another reason, including cores we can't fix right now (doesn't age) |
 | Ready for Stock | Fixed and tested; the update that sets it is the QC sign-off |
 | Converted to Stock | An Admin converted it into a CC stock item carrying the full cost |
+| Returned to Stock | A stock item that was sent to repair is back on a shelf (same item and ID), with the repair costs added to its cost |
+
+**Sending stock to repair (since v1.15):** on a stock item's page, Admin, Sales and Shipping can **Send to repair** with a short reason. That opens a core repair ticket linked to the item and moves the item to the Repair location (its status doesn't change; the page shows "In repair" with a link). Technicians work it like any core. At Ready for Stock an Admin clicks **Return to stock** and picks the shelf: the same item goes back with the repair costs added to its cost. One open repair per item at a time. Customer units come in as customer repair tickets as before.
+
+## Product history
+
+Every stock item's page has a **Product history**, newest first, under a "Now" line (status, location, and any open repair):
+received (who, when, shelf; or the core it came from), every core ticket update, conversion, shelf moves (who and why), sends to repair and returns, cost changes (only for roles that see costs), old repair records from before v1.15, and customer repair tickets with the same serial **and** the same product, which are most likely this unit coming back from a customer. Those tickets also link back to the stock item. A record with only the same serial (a different product) stays a yellow warning, because serials repeat across manufacturers. The core a stock item was converted from is shown as **Came from**, not as a duplicate serial.
 
 The core list can be sorted by any column and shows hours logged. Technicians can enter costs but never see amounts or totals; the cost summary is for Sales, Admin and SuperAdmin. Cores in the old QC status become In Repair automatically.
 
@@ -136,7 +145,7 @@ Every customer, location, manufacturer and model field is a type-to-search drop-
 ## Notes and costs
 
 - **Rich text:** every note and description box (ticket updates, repair intake notes, eval findings, customer notes and activity, product descriptions and requests) is a rich text editor. Ctrl+B / Ctrl+I work, and numbered or bulleted lists continue when you press Enter. Notes are stored as HTML and cleaned of anything unsafe every time they're shown. Older plain-text notes still display normally.
-- **Adjusting a cost (Admin, SuperAdmin):** a stock item's cost, a core's purchase cost, the parts or additional cost on one core update, and a repair's quoted price can each be corrected on the record's page. A reason is required; the old and new amounts, who and when are listed under **Cost adjustments** (Sales and Admins see it; technicians don't). A converted core is adjusted through its stock item.
+- **Adjusting a cost (Admin, SuperAdmin):** a stock item's cost, a core's purchase cost, the parts or additional cost on one core update, and a repair's quoted price can each be corrected on the record's page. A reason is required; the old and new amounts, who and when are kept with the cost. On a stock item it's one **Cost** box: the current cost, every change, and (for Admins) the Adjust form. Sales sees the box without the form; technicians and Shipping don't see it. A converted core is adjusted through its stock item.
 - **Sorting:** the stock list, repair queue and core list sort by clicking a column header.
 - **Costs:** a negative or non-numeric cost turns the field red with a warning and greys out the form's submit button until it's fixed. The server also refuses negative costs.
 

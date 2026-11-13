@@ -458,6 +458,24 @@
         padding: 10px 14px;
         margin: 12px 0
       }
+      .snbox.same {
+        background: #eef5fb;
+        border-color: #bcd3e6
+      }
+      .history {
+        margin-top: 14px
+      }
+      .history .nowline {
+        margin: 0 0 12px;
+        padding: 9px 11px;
+        background: #f0f5f9;
+        border-radius: 8px
+      }
+      .history .ev {
+        padding: 7px 0 7px 12px;
+        border-left: 3px solid #cfdeea;
+        margin-bottom: 4px
+      }
       .snbox ul {
         margin: 6px 0 0;
         padding-left: 18px
@@ -487,6 +505,16 @@
             <div class="section detail"><a href="/inventory?view={{unit.status|urlencode}}">← Back to
               {{unit.status}}</a>
               <h2>Inventory Record #{{unit.id}}</h2>
+              {% if rel.same_unit %}
+                <div class="snbox same">
+                  <strong>Same unit came in as a customer repair</strong> (same serial and product):
+                  <ul>
+                    {% for m in rel.same_unit %}
+                      <li><a href="{{m.url}}">{{m.code}}</a> · {{m.status}}</li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              {% endif %}
               {% if same_serial %}
                 <div class="snbox"><strong>⚠ Same serial number on other records</strong> — check the
                   manufacturer/model; serials can repeat across manufacturers.
@@ -505,7 +533,6 @@
                     ('Status',unit.status),
                     ('Physical Location',unit.physical_location),
                     ('Original Excel Location',unit.location_raw),
-                    ('Recorded Cost',unit.cost if can('view_cost') else 'Hidden for your role'),
                     ('DOM',unit.dom),
                     ('Condition',unit.condition),
                     ('Notes',unit.notes),
@@ -516,37 +543,42 @@
                 {% endfor %}
                 <dt>Catalog product</dt>
                 <dd>{% if product %}<a href="/products/{{product.id}}">{{product.display_name}}</a>{% else %}<span class="muted">Not linked to a Product Database entry</span>{% endif %}</dd>
+                {% if rel.origin %}
+                  <dt>Came from</dt>
+                  <dd><a href="/cores/{{rel.origin.id}}">{{rel.origin.inventory_code}}</a> <span class="muted">(core, converted to this stock item)</span></dd>
+                {% endif %}
+                {% if rel.open_core %}
+                  <dt>In repair</dt>
+                  <dd><a href="/cores/{{rel.open_core.id}}">{{rel.open_core.inventory_code}}</a> · {{rel.open_core.stage}}</dd>
+                {% endif %}
               </dl>
-              {% if can('cost_adjust') or adjustments %}
-                <div class="actions">
-                  {% if can('cost_adjust') %}
-                    <div class="actionbox">
-                      <h3>Adjust cost</h3>
-                      <p class="muted" style="margin:0 0 10px">Admins only. The old and new cost and your reason are kept below.</p>
-                      <form method="post" action="/adjust-cost">
-                        <input type="hidden" name="kind" value="unit">
-                        <input type="hidden" name="record_id" value="{{unit.id}}">
-                        <input type="hidden" name="back" value="/unit/{{unit.id}}">
-                        <input name="amount" data-money inputmode="decimal" placeholder="New cost, e.g. 1250.00" required>
-                        <input name="reason" placeholder="Reason (required)" required style="flex:1;min-width:200px">
-                        <button>Save adjustment</button>
-                      </form>
-                    </div>
-                  {% endif %}
+              <div class="actions">
+                {% if can('view_cost') %}
+                  {# v1.15: cost, its history and the Adjust form in one box. Seen by roles with view_cost; only cost_adjust can change it. #}
                   <div class="actionbox">
-                    <h3>Cost adjustments</h3>
+                    <h3>Cost</h3>
+                    <p style="margin:0 0 10px;font-size:20px"><b>{{'${:,.2f}'.format(unit.cost) if unit.cost is not none else '—'}}</b></p>
                     {% for a in adjustments %}
                       <p style="margin:0 0 8px"><b>{{'${:,.2f}'.format(a.old_value) if a.old_value is not none else '—'}} → {{'${:,.2f}'.format(a.new_value)}}</b>
                         <br>
                         <span class="muted">{{a.at|daytime}} · {{a.actor}} · {{a.reason}}</span>
                       </p>
                     {% else %}
-                      <p class="muted">No adjustments.</p>
+                      <p class="muted" style="margin:0 0 8px">No changes since it was received.</p>
                     {% endfor %}
+                    {% if can('cost_adjust') %}
+                      <form method="post" action="/adjust-cost" style="margin-top:10px">
+                        <input type="hidden" name="kind" value="unit">
+                        <input type="hidden" name="record_id" value="{{unit.id}}">
+                        <input type="hidden" name="back" value="/unit/{{unit.id}}">
+                        <input name="amount" data-money inputmode="decimal" placeholder="New cost, e.g. 1250.00" required>
+                        <input name="reason" placeholder="Reason (required)" required style="flex:1;min-width:200px">
+                        <button>Adjust cost</button>
+                      </form>
+                      <p class="muted" style="margin:6px 0 0">Admins only. The old and new cost, who and why are kept above.</p>
+                    {% endif %}
                   </div>
-                </div>
-              {% endif %}
-              <div class="actions">
+                {% endif %}
                 {% if can('move') and (can('restricted_stock') or unit.status not in hidden_statuses) %}
                   <div class="actionbox">
                     <h3>Transfer location</h3>
@@ -554,40 +586,34 @@
                       Transfer</button></form>
                   </div>
                 {% endif %}
-                {% if can('unit_repair') %}
+                {% if can('send_to_repair') and unit.status != 'Sold archive' %}
                   <div class="actionbox">
-                    <h3>Repair record</h3>
-                    <form method="post" action="/repair/{{unit.id}}"><select name="type">
-                      <option>Internal refurbishment</option>
-                      <option>Customer repair</option>
-                      </select><input name="notes" placeholder="Repair notes"><button>Create Repair</button>
-                    </form>
+                    <h3>Send to repair</h3>
+                    {% if rel.open_core %}
+                      <p class="muted" style="margin:0">Already in repair as <a href="/cores/{{rel.open_core.id}}">{{rel.open_core.inventory_code}}</a>.</p>
+                    {% else %}
+                      <form method="post" action="/unit/{{unit.id}}/send-to-repair">
+                        <input name="reason" maxlength="500" placeholder="What's wrong (required)" required style="flex:1;min-width:200px">
+                        <button>Send to repair</button>
+                      </form>
+                      <p class="muted" style="margin:6px 0 0">Opens a core repair ticket for this item and moves it to the Repair location.
+                        When it's fixed, an Admin returns it to stock with the repair costs added.</p>
+                    {% endif %}
                   </div>
                 {% endif %}
               </div>
-              <div class="actions">
-                <div class="actionbox">
-                  <h3>Location history</h3>
-                  {% for m in movements %}
-                    <p style="margin:0 0 8px"><b>{{m.old_location or '—'}} → {{m.new_location}}</b>
-                      <br>
-                      <span class="muted">{{m.created_at|daytime}}{% if m.note %} · {{m.note}}{% endif %}</span>
-                    </p>
-                  {% else %}
-                    <p class="muted">No transfers recorded.</p>
-                  {% endfor %}
-                </div>
-                <div class="actionbox">
-                  <h3>Repair records</h3>
-                  {% for r in unit_repairs %}
-                    <p style="margin:0 0 8px"><b>{{r.repair_type}}</b> · {{r.status}}
-                      <br>
-                      <span class="muted">{{r.created_at|daytime}}{% if r.notes %} · {{r.notes}}{% endif %}</span>
-                    </p>
-                  {% else %}
-                    <p class="muted">No repair records.</p>
-                  {% endfor %}
-                </div>
+              <div class="actionbox history">
+                <h3>Product history</h3>
+                <p class="nowline"><b>Now:</b> {{now_line}}</p>
+                {% for e in events %}
+                  <div class="ev">
+                    <b>{% if e.url %}<a href="{{e.url}}">{{e.title}}</a>{% else %}{{e.title}}{% endif %}</b>
+                    <br>
+                    <span class="muted">{{ (e.when|day) if e.when|length == 10 else (e.when|daytime) }}{% if e.detail %} · {{e.detail}}{% endif %}</span>
+                  </div>
+                {% else %}
+                  <p class="muted">Nothing recorded yet.</p>
+                {% endfor %}
               </div>
             </div>
           {% else %}

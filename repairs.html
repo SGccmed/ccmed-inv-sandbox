@@ -1108,6 +1108,10 @@
                   {% if warranty_of %}
                     <p>Warranty return of <a href="/repairs/{{warranty_of.id}}">{{warranty_of.inventory_code or warranty_of.rma}}</a> ({{warranty_of.stage}})</p>
                   {% endif %}
+                  {% for u in same_stock %}
+                    <p><strong>Same unit as our stock item</strong> <a href="/unit/{{u.id}}">{{u.inventory_code or 'stock item #' ~ u.id}}</a>
+                      ({{u.product_raw}} · {{u.status}}) <span class="muted">same serial and product; its Product history lists this ticket</span></p>
+                  {% endfor %}
                   {% for x in returns %}
                     <p>Came back under warranty as <a href="/repairs/{{x.id}}">{{x.inventory_code or x.rma}}</a> ({{x.stage}})</p>
                   {% endfor %}
@@ -1118,7 +1122,7 @@
                         <li><a href="{{m.url}}">{{m.code}}</a> · {{m.kind}} · {{m.manufacturer}} {{m.product}} · {{m.status}}</li>
                       {% endfor %}
                     </ul>
-                  {% elif not warranty_of and not returns %}
+                  {% elif not warranty_of and not returns and not same_stock %}
                     <p class="muted">No other records for this serial. Loaners and exchanges will link here later.</p>
                   {% endif %}
                 </div>

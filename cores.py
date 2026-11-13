@@ -25,8 +25,11 @@ STAGES = {
     'Ready for Stock': {'hold': False, 'guide': "Fixed and tested; the update that set this status is the QC sign-off. "
                                                 "An Admin converts it to a CC stock item, carrying the full cost."},
     'Converted to Stock': {'hold': False, 'guide': "Done. It's now a stock item; this core can't be changed."},
+    'Returned to Stock': {'hold': False, 'guide': "Done. The stock item it was sent from is back on the shelf, with these repair costs "
+                                                  "added to its cost; this ticket can't be changed."},
 }
-WORK_STAGES = [s for s in STAGES if s != 'Converted to Stock']   # statuses a tech can set
+CLOSED_STAGES = ('Converted to Stock', 'Returned to Stock')       # v1.15: Returned = a stock item sent to repair came back
+WORK_STAGES = [s for s in STAGES if s not in CLOSED_STAGES]      # statuses a tech can set
 OLD_STAGES = {'QC': 'In Repair'}                                 # before v1.07
 
 CORE_COLUMNS = [('stage_started_at', 'TEXT')]
@@ -78,7 +81,7 @@ def core_view(r):
     info = STAGES.get(d['stage'], {'hold': False, 'guide': ''})
     d['hold'] = info['hold']
     d['stage_days'] = days_since(d.get('stage_started_at') or d['created_at'])
-    if d['stage'] == 'Converted to Stock':
+    if d['stage'] in CLOSED_STAGES:
         d['age'] = 'closed'
     elif info['hold']:
         d['age'] = 'hold'
@@ -115,7 +118,7 @@ def register_core_routes(app, conn, base_dir, inventory_code_maker, norm):
         if stage in STAGES:
             where, args = ' WHERE c.stage=?', [stage]
         elif stage != 'all':
-            where = " WHERE c.stage<>'Converted to Stock'"
+            where = " WHERE c.stage NOT IN ('Converted to Stock','Returned to Stock')"
         sort = dict(CORE_SORT)
         if not can('view_cost'):
             sort.pop('cost')
@@ -143,10 +146,11 @@ def register_core_routes(app, conn, base_dir, inventory_code_maker, norm):
         total_hours = sum(u['hours'] or 0 for u in updates)
         techs = staff(c)
         adjustments = costs.adjustments_for(c, f'/cores/{cid}') if can('view_cost') else []
+        from_unit = c.execute('SELECT * FROM units WHERE id=?', (core['source_unit_id'],)).fetchone() if core['source_unit_id'] else None
         c.close()
         return render(detail=core_view(core), guide=STAGES.get(core['stage'], {}).get('guide', ''), updates=updates,
                       parts=parts, other=other, total=core['original_cost'] + parts + other, techs=techs,
-                      total_hours=total_hours, adjustments=adjustments,
+                      total_hours=total_hours, adjustments=adjustments, from_unit=from_unit, closed_stages=CLOSED_STAGES,
                       today=today_pacific().isoformat(), me=me_name(), is_admin=bool(roles_of(g.user) & ADMIN_ROLES))
 
     @app.post('/cores/<int:cid>/update')
@@ -159,8 +163,8 @@ def register_core_routes(app, conn, base_dir, inventory_code_maker, norm):
         if core is None:
             c.close(); abort(404)
         back = redirect(url_for('core_detail', cid=cid))
-        if core['stage'] == 'Converted to Stock':
-            c.close(); flash('This core is already stock and can\'t be changed.'); return back
+        if core['stage'] in CLOSED_STAGES:
+            c.close(); flash('This core is already back in stock and can\'t be changed.'); return back
         try:
             parts = money(f.get('parts'), 'Parts cost')
             other = money(f.get('other'), 'Additional cost')
@@ -215,6 +219,8 @@ def register_core_routes(app, conn, base_dir, inventory_code_maker, norm):
             c.close(); abort(404)
         if core['stage'] != 'Ready for Stock':
             c.close(); flash('Set the status to Ready for Stock before converting.'); return redirect(url_for('core_detail', cid=cid))
+        if core['source_unit_id']:
+            c.close(); flash('This ticket is for a stock item: use Return to stock.'); return redirect(url_for('core_detail', cid=cid))
         try:
             c.execute('BEGIN IMMEDIATE')
             repair_cost = c.execute('SELECT COALESCE(SUM(labor_cost+parts_cost+other_cost),0) FROM core_transactions WHERE core_id=?', (cid,)).fetchone()[0]
@@ -240,3 +246,51 @@ def register_core_routes(app, conn, base_dir, inventory_code_maker, norm):
         c.close()
         flash(f'Converted to {code} with total cost ${total:,.2f}')
         return redirect(url_for('core_detail', cid=cid))
+
+    @app.post('/cores/<int:cid>/return')
+    def core_return(cid):
+        # v1.15: a stock item that was sent to repair (core_items.source_unit_id) goes back on a shelf as the SAME
+        # item. Its repair costs are added to the item's cost, recorded like a cost adjustment so the Cost box and
+        # the Product history show where the money went.
+        if not can('core_convert'):
+            abort(403)
+        import choices
+        c = conn()
+        core = c.execute('SELECT * FROM core_items WHERE id=?', (cid,)).fetchone()
+        if core is None or not core['source_unit_id']:
+            c.close(); abort(404)
+        back = redirect(url_for('core_detail', cid=cid))
+        if core['stage'] != 'Ready for Stock':
+            c.close(); flash('Set the status to Ready for Stock (the QC sign-off) before returning it to stock.'); return back
+        loc = choices.location(request.form.get('location'))
+        if not loc or loc == 'Repair':
+            c.close(); flash('Pick the shelf it goes back to.'); return back
+        unit = c.execute('SELECT * FROM units WHERE id=?', (core['source_unit_id'],)).fetchone()
+        if unit is None:
+            c.close(); flash('The stock item for this ticket no longer exists.'); return back
+        try:
+            c.execute('BEGIN IMMEDIATE')
+            repair_cost = round(c.execute('SELECT COALESCE(SUM(labor_cost+parts_cost+other_cost),0) FROM core_transactions WHERE core_id=?', (cid,)).fetchone()[0], 2)
+            now = now_iso()
+            if repair_cost:
+                new_cost = round((unit['cost'] or 0) + repair_cost, 2)
+                c.execute('UPDATE units SET cost=? WHERE id=?', (new_cost, unit['id']))
+                c.execute("""INSERT INTO cost_adjustments(kind, record_id, page, label, old_value, new_value, reason, actor, at)
+                             VALUES (?,?,?,?,?,?,?,?,?)""", ('unit', unit['id'], f"/unit/{unit['id']}", 'Stock cost', unit['cost'], new_cost,
+                                                       f"Repair costs from {core['inventory_code']}", g.user['username'], now))
+            status = choices.location_status(loc)
+            c.execute('INSERT INTO movements(unit_id, old_location, new_location, note, actor) VALUES (?,?,?,?,?)',
+                      (unit['id'], unit['physical_location'], loc, f"Back from repair ({core['inventory_code']})", g.user['username']))
+            c.execute('UPDATE units SET physical_location=?, status=? WHERE id=?',
+                      (loc, status if unit['status'] in ('Active', 'On loan', 'Rental') else unit['status'], unit['id']))
+            c.execute('UPDATE core_items SET stage=?, stage_started_at=?, location=? WHERE id=?', ('Returned to Stock', now, loc, cid))
+            c.execute("""INSERT INTO core_transactions(core_id, performed_at, technician, description, labor_method, labor_hours, labor_rate,
+                         labor_cost, parts_cost, other_cost, work_date, actor, old_stage, new_stage) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                      (cid, now, me_name(), f"Returned to stock as {unit['inventory_code'] or 'item #' + str(unit['id'])}, shelf {loc}.",
+                       'none', 0, 0, 0, 0, 0, today_pacific().isoformat(), g.user['username'], 'Ready for Stock', 'Returned to Stock'))
+            c.commit()
+        except sqlite3.Error as e:
+            c.rollback(); c.close(); flash('Not returned: ' + str(e)); return back
+        c.close()
+        flash(f"Returned to stock: {unit['inventory_code'] or 'item'} is on shelf {loc}" + (f', with ${repair_cost:,.2f} of repair costs added' if repair_cost and can('view_cost') else ''))
+        return back

@@ -81,7 +81,7 @@ def register_cost_routes(app, conn):
         if kind.startswith('core'):
             core_id = row['core_id'] if kind in ('core_parts', 'core_other') else row['id']
             stage = c.execute('SELECT stage FROM core_items WHERE id=?', (core_id,)).fetchone()[0]
-            if stage == 'Converted to Stock':
+            if stage in ('Converted to Stock', 'Returned to Stock'):
                 c.close(); flash('This core is already stock; adjust the stock item\'s cost instead.'); return redirect(back)
         old = row[column]
         url = page.format(id=row['id'], parent=row['core_id'] if 'core_id' in row.keys() else '')

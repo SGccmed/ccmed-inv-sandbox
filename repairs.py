@@ -501,6 +501,11 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
         work_log = c.execute('SELECT * FROM repair_log WHERE repair_id=? ORDER BY at DESC, id DESC', (rid,)).fetchall()
         client = c.execute('SELECT * FROM clients WHERE id=?', (r['client_id'],)).fetchone() if r['client_id'] else None
         same_serial = serial_matches(c, r['serial'], exclude=('repair', rid))
+        # v1.15: our stock items with the same serial AND product are most likely this unit (sold, now back).
+        import history
+        same_stock = history.same_unit_stock(c, r['serial'], r['manufacturer'], r['model'])
+        stock_urls = {f"/unit/{u['id']}" for u in same_stock}
+        same_serial = [m for m in same_serial if m['url'] not in stock_urls]
         # Earlier tickets for the same serial: candidates for "warranty return of".
         earlier = [m for m in same_serial if m['url'].startswith('/repairs/')]
         warranty_of = c.execute('SELECT id, inventory_code, rma, stage FROM customer_repairs WHERE id=?', (r['warranty_of_id'],)).fetchone() if r['warranty_of_id'] else None
@@ -509,7 +514,7 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
         adjustments = costs.adjustments_for(c, f'/repairs/{rid}') if can('view_cost') else []
         c.close()
         updates = [e for e in work_log if e['kind'] == 'update']
-        return render(mode='detail', today=today_pacific().isoformat(), adjustments=adjustments,
+        return render(mode='detail', today=today_pacific().isoformat(), adjustments=adjustments, same_stock=same_stock,
                       total_hours=sum(e['hours'] or 0 for e in updates),
                       parts_total=sum(e['parts_cost'] or 0 for e in updates),
                       other_total=sum(e['other_cost'] or 0 for e in updates),
