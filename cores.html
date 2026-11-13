@@ -603,7 +603,7 @@
           <a class="nav" href="/inventory/new">+ New Inventory</a>
         {% endif %}
         {% if can('client_view') %}
-          <a class="nav" href="/clients">Clients</a>
+          <a class="nav" href="/clients">Customers</a>
         {% endif %}
         <a class="nav" href="/products">Product Database</a>
         <a class="nav active" href="/cores">Core Repairs (CR)</a>
@@ -697,7 +697,6 @@
                 <h1>{{detail.inventory_code}} · {{detail.product_raw}}</h1>
                 <div class="muted">
                   Serial {{detail.serial or '—'}} · Location {{detail.location or '—'}} · Received {{detail.created_at|day}}
-                  {% if detail.supplier %} · From {{detail.supplier}}{% endif %}
                 </div>
               </div>
               <a href="/cores">← Back to cores</a>

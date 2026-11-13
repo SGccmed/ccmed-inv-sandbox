@@ -1,6 +1,6 @@
-"""Client accounts (Salesforce / QuickBooks style): accounts, contacts, activity log and full history.
+"""Customer accounts (Salesforce / QuickBooks style): accounts, contacts, activity log and full history.
 
-Every client gets a permanent ID (CL-00001). Repairs link to a client by that ID, so renaming a client never breaks its history.
+Every customer gets a permanent ID (CL-00001). Repairs link to a customer by that ID, so renaming a customer never breaks its history.
 """
 import os
 import re
@@ -51,13 +51,13 @@ def add_column(c, table, name, typ):
 
 
 def create_client(c, name, actor='system', **fields):
-    """Insert a client, give it the next CL-##### ID, and log it. Returns the new id."""
+    """Insert a customer, give it the next CL-##### ID, and log it. Returns the new id."""
     now = now_iso()
     cols = ['name', 'created_at', 'updated_at'] + [k for k in fields if k in CLIENT_FIELDS and k != 'name']
     vals = [clean(name), now, now] + [fields[k] for k in cols[3:]]
     cid = c.execute(f'INSERT INTO clients({",".join(cols)}) VALUES ({",".join("?" * len(cols))})', vals).lastrowid
     c.execute('UPDATE clients SET client_code=? WHERE id=?', (f'CL-{cid:05d}', cid))
-    log(c, cid, 'System', 'Client created', f'Client record created for {clean(name)}', actor, now)
+    log(c, cid, 'System', 'Customer created', f'Customer record created for {clean(name)}', actor, now)
     return cid
 
 
@@ -67,7 +67,7 @@ def log(c, client_id, kind, subject, details='', actor=None, when=None):
 
 
 def ensure_client_schema(c):
-    """Create client tables and link columns. Safe to run on every start and after a restore."""
+    """Create customer tables and link columns. Safe to run on every start and after a restore."""
     c.executescript(SCHEMA)
     add_column(c, 'customer_repairs', 'client_id', 'INTEGER')
     # One Salesforce account per client (blank allowed). Skipped if an older database already has duplicates.
@@ -110,7 +110,7 @@ def salesforce_url(sfid):
 
 
 def salesforce_check(c, sfid, client_id=None):
-    """Error message if the ID is malformed or already on another client."""
+    """Error message if the ID is malformed or already on another customer."""
     problem = salesforce_id_problem(sfid)
     if problem or not clean(sfid):
         return problem
@@ -125,7 +125,7 @@ def client_label(row):
 
 
 def resolve_client(c, text):
-    """Turn what was typed/picked in a client box into a client row (by CL- ID first, then exact name)."""
+    """Turn what was typed/picked in a customer box into a customer row (by CL- ID first, then exact name)."""
     text = clean(text)
     if not text:
         return None
@@ -187,8 +187,8 @@ a{color:#245d86}label{display:block;margin:0 0 4px;font-weight:600;font-size:12p
 .tl{border-left:3px solid #dfe7ef;margin-left:8px;padding-left:18px}.tl .ev{position:relative;padding:0 0 14px}.tl .ev:before{content:"";position:absolute;left:-26px;top:5px;width:11px;height:11px;border-radius:50%;background:#245d86}.tl .ev.Repair:before{background:#c47a12}.tl .ev.Inventory:before{background:#2f8a4a}.tl .ev.System:before{background:#9aa9b6}
 @media(max-width:900px){aside{position:static;width:auto;min-height:0}main{margin:0;padding:15px}.grid,.cards{grid-template-columns:1fr 1fr}.grid .wide{grid-column:span 2}}
 @media(max-width:560px){.grid,.cards{grid-template-columns:1fr}.grid .wide{grid-column:span 1}dl{grid-template-columns:1fr}}</style>'''
-LAYOUT = add_user_block('''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CC Medical | Clients</title>''' + STYLE + '''</head><body>
-<aside><h2><a class="brandlink" href="/">CC Medical</a></h2><!--search--><a href="/">Home</a><a href="/inventory">Inventory Dashboard</a>{% if can('receive') %}<a href="/inventory/new">+ New Inventory</a>{% endif %}<a class="active" href="/clients">Clients</a><a href="/products">Product Database</a><a href="/cores">Core Repairs (CR)</a><a href="/repairs">Customer Repairs (RP)</a></aside>
+LAYOUT = add_user_block('''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CC Medical | Customers</title>''' + STYLE + '''</head><body>
+<aside><h2><a class="brandlink" href="/">CC Medical</a></h2><!--search--><a href="/">Home</a><a href="/inventory">Inventory Dashboard</a>{% if can('receive') %}<a href="/inventory/new">+ New Inventory</a>{% endif %}<a class="active" href="/clients">Customers</a><a href="/products">Product Database</a><a href="/cores">Core Repairs (CR)</a><a href="/repairs">Customer Repairs (RP)</a></aside>
 <main>{% with msgs=get_flashed_messages() %}{% for m in msgs %}<div class="msg">{{m}}</div>{% endfor %}{% endwith %}{{body|safe}}</main></body></html>''')
 
 
@@ -196,20 +196,20 @@ def page(body, **ctx):
     return render_template_string(LAYOUT, body=render_template_string(body, **ctx))
 
 
-LIST_PAGE = '''<div class="toolbar" style="justify-content:space-between"><div><h1>Clients</h1><div class="muted">Accounts with contacts, activity and full repair / equipment history.</div></div><div style="display:flex;gap:8px">{% if can('client_import') %}<a class="btn secondary" href="/clients/salesforce">Link to Salesforce</a>{% endif %}{% if can('client_edit') %}<a class="btn" href="/clients/new">+ New Client</a>{% endif %}</div></div>
-<div class="cards"><div class="card"><span>Total clients</span><strong>{{stats.total}}</strong></div><div class="card"><span>Active</span><strong>{{stats.active}}</strong></div><div class="card"><span>Prospects</span><strong>{{stats.prospect}}</strong></div><div class="card"><span>Clients with open repairs</span><strong>{{stats.open_clients}}</strong></div><div class="card"><span>Open RMAs</span><strong>{{stats.open_rmas}}</strong></div></div>
+LIST_PAGE = '''<div class="toolbar" style="justify-content:space-between"><div><h1>Customers</h1><div class="muted">Accounts with contacts, activity and full repair / equipment history.</div></div><div style="display:flex;gap:8px">{% if can('client_import') %}<a class="btn secondary" href="/clients/salesforce">Link to Salesforce</a>{% endif %}{% if can('client_edit') %}<a class="btn" href="/clients/new">+ New Customer</a>{% endif %}</div></div>
+<div class="cards"><div class="card"><span>Total customers</span><strong>{{stats.total}}</strong></div><div class="card"><span>Active</span><strong>{{stats.active}}</strong></div><div class="card"><span>Prospects</span><strong>{{stats.prospect}}</strong></div><div class="card"><span>Customers with open repairs</span><strong>{{stats.open_clients}}</strong></div><div class="card"><span>Open RMAs</span><strong>{{stats.open_rmas}}</strong></div></div>
 <section><form class="toolbar"><div style="flex:1;min-width:240px"><label>Search</label><input name="q" value="{{q}}" placeholder="Name, CL- number, Salesforce ID, phone, email, contact…"></div>
 <div><label>Type</label><select name="type"><option value="">All types</option>{% for t in types %}<option {% if t==type %}selected{% endif %}>{{t}}</option>{% endfor %}</select></div>
 <div><label>Status</label><select name="status"><option value="">All statuses</option>{% for s in statuses %}<option {% if s==status %}selected{% endif %}>{{s}}</option>{% endfor %}</select></div>
 <div><label>Account owner</label><select name="owner"><option value="">Anyone</option>{% for o in owners %}<option {% if o==owner %}selected{% endif %}>{{o}}</option>{% endfor %}</select></div>
 <button>Filter</button><a class="btn secondary" href="/clients">Clear</a></form></section>
-<section><div style="overflow:auto"><table><tr><th>Client ID</th><th>Name</th><th>Type</th><th>Status</th><th>Primary contact</th><th>Phone</th><th>Account owner</th><th>Salesforce</th><th>Open RMAs</th><th>Total RMAs</th><th>Last activity</th></tr>
+<section><div style="overflow:auto"><table><tr><th>Customer ID</th><th>Name</th><th>Type</th><th>Status</th><th>Primary contact</th><th>Phone</th><th>Account owner</th><th>Salesforce</th><th>Open RMAs</th><th>Total RMAs</th><th>Last activity</th></tr>
 {% for r in rows %}<tr><td>{{r.client_code}}</td><td><a href="/clients/{{r.id}}"><strong>{{r.name}}</strong></a></td><td>{{r.account_type or ''}}</td><td><span class="pill {{r.status}}">{{r.status}}</span></td><td>{{r.contact or '—'}}</td><td class="nw">{{r.phone or ''}}</td><td>{{r.account_owner or ''}}</td><td>{{'Linked' if r.salesforce_id else '—'}}</td><td>{{r.open_rmas}}</td><td>{{r.total_rmas}}</td><td class="nw">{{r.last_activity|day if r.last_activity else ''}}</td></tr>
-{% else %}<tr><td colspan="11">No clients match.</td></tr>{% endfor %}</table></div><p class="muted">{{rows|length}} shown</p></section>'''
+{% else %}<tr><td colspan="11">No customers match.</td></tr>{% endfor %}</table></div><p class="muted">{{rows|length}} shown</p></section>'''
 
-FORM_PAGE = '''<p><a href="{{'/clients/'~c.id if c else '/clients'}}">← {{'Back to '~c.name if c else 'Clients'}}</a></p><h1>{{'Edit '~c.name if c else 'New Client'}}</h1>
+FORM_PAGE = '''<p><a href="{{'/clients/'~c.id if c else '/clients'}}">← {{'Back to '~c.name if c else 'Customers'}}</a></p><h1>{{'Edit '~c.name if c else 'New Customer'}}</h1>
 <form method="post"><section><h2>Account</h2><div class="grid">
-<div class="wide"><label>Client / account name *</label><input name="name" required maxlength="160" value="{{c.name if c else ''}}"></div>
+<div class="wide"><label>Customer / account name *</label><input name="name" required maxlength="160" value="{{c.name if c else ''}}"></div>
 <div><label>Account type</label><select name="account_type">{% for t in types %}<option {% if c and c.account_type==t %}selected{% endif %}>{{t}}</option>{% endfor %}</select></div>
 <div><label>Status</label><select name="status">{% for s in statuses %}<option {% if c and c.status==s %}selected{% endif %}>{{s}}</option>{% endfor %}</select></div>
 <div><label>Account owner (sales rep)</label><input name="account_owner" value="{{c.account_owner if c else g.user.username}}"></div>
@@ -221,14 +221,14 @@ FORM_PAGE = '''<p><a href="{{'/clients/'~c.id if c else '/clients'}}">← {{'Bac
 <label style="margin-top:12px"><input type="checkbox" name="tax_exempt" value="1" style="width:auto" {% if c and c.tax_exempt %}checked{% endif %}> Tax exempt</label></div>
 </div></section>
 {% if not c %}<section><h2>Primary contact</h2><div class="grid"><div><label>Name</label><input name="contact_name"></div><div><label>Title</label><input name="contact_title" placeholder="Biomed manager"></div><div></div><div><label>Phone</label><input name="contact_phone"></div><div><label>Email</label><input name="contact_email" type="email"></div></div></section>{% endif %}
-<section><h2>Other</h2><div class="grid"><div><label>QuickBooks customer ID</label><input name="quickbooks_id" value="{{c.quickbooks_id or '' if c else ''}}" placeholder="For future sync"></div><div><label>Salesforce account ID</label><input name="salesforce_id" value="{{c.salesforce_id or '' if c else ''}}" placeholder="15 or 18 characters, starts with 001"><div class="muted" style="font-size:12px">From the account's page in Salesforce. Links this client to Salesforce; our CL- number stays the same.</div></div><div></div>
+<section><h2>Other</h2><div class="grid"><div><label>QuickBooks customer ID</label><input name="quickbooks_id" value="{{c.quickbooks_id or '' if c else ''}}" placeholder="For future sync"></div><div><label>Salesforce account ID</label><input name="salesforce_id" value="{{c.salesforce_id or '' if c else ''}}" placeholder="15 or 18 characters, starts with 001"><div class="muted" style="font-size:12px">From the account's page in Salesforce. Links this customer to Salesforce; our CL- number stays the same.</div></div><div></div>
 <div class="wide"><label>Notes</label><textarea name="notes" rows="3" data-rich>{{c.notes|editor_value if c else ''}}</textarea></div></div></section>
-<button>{{'Save changes' if c else 'Create client'}}</button></form>'''
+<button>{{'Save changes' if c else 'Create customer'}}</button></form>'''
 
-DETAIL_PAGE = '''<p><a href="/clients">← Clients</a></p>
+DETAIL_PAGE = '''<p><a href="/clients">← Customers</a></p>
 <div class="toolbar" style="justify-content:space-between"><div><h1>{{c.name}}</h1><div class="muted">{{c.client_code}} · {{c.account_type or 'No type'}} · <span class="pill {{c.status}}">{{c.status}}</span>{% if c.account_owner %} · Owner: {{c.account_owner}}{% endif %}</div></div>
-<div class="toolbar">{% if can('client_edit') %}<a class="btn secondary" href="/clients/{{c.id}}/edit">Edit client</a>{% endif %}{% if can('rma_create') %}<a class="btn" href="/repairs/new?client={{c.client_code|urlencode}}">+ New RMA</a>{% endif %}</div></div>
-<div class="cards"><div class="card"><span>Open repairs</span><strong>{{kpi.open}}</strong></div><div class="card"><span>Total repairs</span><strong>{{kpi.total}}</strong></div><div class="card"><span>Avg. repair turnaround</span><strong>{{kpi.avg_days if kpi.avg_days is not none else '—'}}{% if kpi.avg_days is not none %} <small>days</small>{% endif %}</strong></div><div class="card"><span>Contacts</span><strong>{{contacts|length}}</strong></div><div class="card"><span>Client since</span><strong style="font-size:17px">{{c.created_at|day}}</strong></div></div>
+<div class="toolbar">{% if can('client_edit') %}<a class="btn secondary" href="/clients/{{c.id}}/edit">Edit customer</a>{% endif %}{% if can('rma_create') %}<a class="btn" href="/repairs/new?client={{c.client_code|urlencode}}">+ New RMA</a>{% endif %}</div></div>
+<div class="cards"><div class="card"><span>Open repairs</span><strong>{{kpi.open}}</strong></div><div class="card"><span>Total repairs</span><strong>{{kpi.total}}</strong></div><div class="card"><span>Avg. repair turnaround</span><strong>{{kpi.avg_days if kpi.avg_days is not none else '—'}}{% if kpi.avg_days is not none %} <small>days</small>{% endif %}</strong></div><div class="card"><span>Contacts</span><strong>{{contacts|length}}</strong></div><div class="card"><span>Customer since</span><strong style="font-size:17px">{{c.created_at|day}}</strong></div></div>
 <nav class="tabs"><a href="#overview" class="on">Overview</a><a href="#contacts">Contacts ({{contacts|length}})</a><a href="#repairs">Repairs ({{repairs|length}})</a><a href="#loaners">Loaners</a><a href="#sales">Sales</a><a href="#history">Full history ({{timeline|length}})</a></nav>
 
 <div class="tab on" id="t-overview"><section><div class="grid"><div class="wide" style="grid-column:span 2"><dl>
@@ -243,9 +243,9 @@ DETAIL_PAGE = '''<p><a href="/clients">← Clients</a></p>
 <td>{% if not p.is_primary and can('client_edit') %}<form method="post" action="/clients/{{c.id}}/contacts/{{p.id}}/primary" style="display:inline"><button class="secondary">Make primary</button></form> <form method="post" action="/clients/{{c.id}}/contacts/{{p.id}}/remove" style="display:inline"><button class="secondary">Remove</button></form>{% endif %}</td></tr>{% else %}<tr><td colspan="5">No contacts yet.</td></tr>{% endfor %}</table>
 {% if can('client_edit') %}<h2 style="margin-top:20px">Add contact</h2><form method="post" action="/clients/{{c.id}}/contacts" class="grid"><div><label>Name *</label><input name="name" required></div><div><label>Title</label><input name="title"></div><div><label>Phone</label><input name="phone"></div><div><label>Email</label><input name="email" type="email"></div><div><label>&nbsp;</label><label><input type="checkbox" name="is_primary" value="1" style="width:auto"> Primary contact</label></div><div><label>&nbsp;</label><button>Add contact</button></div></form>{% endif %}</section></div>
 
-<div class="tab" id="t-repairs"><section><h2>Customer repairs (RMAs)</h2><div style="overflow:auto"><table><tr><th>Inventory ID</th><th>RMA</th><th>Equipment</th><th>Serial</th><th>Stage</th><th>Received</th><th>Closed</th><th>Assigned</th></tr>{% for r in repairs %}<tr><td>{{r.inventory_code or 'Legacy'}}</td><td><a href="/repairs/{{r.id}}"><strong>{{r.rma}}</strong></a></td><td>{{r.manufacturer or ''}} {{r.model or ''}}</td><td>{{r.serial or ''}}</td><td><span class="pill">{{r.stage}}</span></td><td>{{r.received_date|day}}</td><td>{{r.completed_at|day if r.completed_at else ''}}{% if r.resolution %} · {{r.resolution}}{% endif %}</td><td>{{r.assigned_to or r.technician or ''}}</td></tr>{% else %}<tr><td colspan="8">No repairs for this client.</td></tr>{% endfor %}</table></div></section></div>
+<div class="tab" id="t-repairs"><section><h2>Customer repairs (RMAs)</h2><div style="overflow:auto"><table><tr><th>Inventory ID</th><th>RMA</th><th>Equipment</th><th>Serial</th><th>Stage</th><th>Received</th><th>Closed</th><th>Assigned</th></tr>{% for r in repairs %}<tr><td>{{r.inventory_code or 'Legacy'}}</td><td><a href="/repairs/{{r.id}}"><strong>{{r.rma}}</strong></a></td><td>{{r.manufacturer or ''}} {{r.model or ''}}</td><td>{{r.serial or ''}}</td><td><span class="pill">{{r.stage}}</span></td><td>{{r.received_date|day}}</td><td>{{r.completed_at|day if r.completed_at else ''}}{% if r.resolution %} · {{r.resolution}}{% endif %}</td><td>{{r.assigned_to or r.technician or ''}}</td></tr>{% else %}<tr><td colspan="8">No repairs for this customer.</td></tr>{% endfor %}</table></div></section></div>
 
-<div class="tab" id="t-loaners"><section><h2>Loaners</h2><p class="muted">Loaner tracking is the next module to be built. Loaners sent to this client will be listed here.</p></section></div>
+<div class="tab" id="t-loaners"><section><h2>Loaners</h2><p class="muted">Loaner tracking is the next module to be built. Loaners sent to this customer will be listed here.</p></section></div>
 <div class="tab" id="t-sales"><section><h2>Sales</h2><p class="muted">Sales records will be listed here once sales tracking is built.</p></section></div>
 
 <div class="tab" id="t-history"><section><h2>Full history</h2><form class="toolbar" onsubmit="return false"><div><label>Show</label><select id="hf" onchange="filt()"><option value="">Everything</option><option>Activity</option><option>Repair</option><option>System</option></select></div></form>
@@ -322,7 +322,7 @@ def register_client_routes(app, conn):
         if request.method == 'POST':
             vals = client_form_values(request.form)
             if not vals['name']:
-                flash('Client name is required.'); return redirect('/clients/new')
+                flash('Customer name is required.'); return redirect('/clients/new')
             c = conn()
             problem = salesforce_check(c, vals['salesforce_id'])
             if problem:
@@ -330,7 +330,7 @@ def register_client_routes(app, conn):
             dup = c.execute('SELECT id,client_code FROM clients WHERE name=? COLLATE NOCASE', (vals['name'],)).fetchone()
             if dup and request.form.get('allow_duplicate') != '1':
                 c.close()
-                flash(f"A client named \"{vals['name']}\" already exists ({dup['client_code']}). Open it instead, or rename the new one.")
+                flash(f"A customer named \"{vals['name']}\" already exists ({dup['client_code']}). Open it instead, or rename the new one.")
                 return redirect(f"/clients/{dup['id']}")
             name = vals.pop('name')
             cid = create_client(c, name, actor_name(), **vals)
@@ -339,7 +339,7 @@ def register_client_routes(app, conn):
                 c.execute('INSERT INTO client_contacts(client_id,name,title,phone,email,is_primary,created_at) VALUES (?,?,?,?,?,1,?)',
                           (cid, clean(f.get('contact_name')), clean(f.get('contact_title')), clean(f.get('contact_phone')), clean(f.get('contact_email')), now_iso()))
             c.commit(); code = c.execute('SELECT client_code FROM clients WHERE id=?', (cid,)).fetchone()[0]; c.close()
-            flash(f'Client created: {code}')
+            flash(f'Customer created: {code}')
             return redirect(f'/clients/{cid}')
         return page(FORM_PAGE, c=None, types=ACCOUNT_TYPES, statuses=ACCOUNT_STATUSES, terms=PAYMENT_TERMS)
 
@@ -355,7 +355,7 @@ def register_client_routes(app, conn):
         if request.method == 'POST':
             vals = client_form_values(request.form)
             if not vals['name']:
-                c.close(); flash('Client name is required.'); return redirect(f'/clients/{cid}/edit')
+                c.close(); flash('Customer name is required.'); return redirect(f'/clients/{cid}/edit')
             problem = salesforce_check(c, vals['salesforce_id'], cid)
             if problem:
                 c.close(); flash(problem); return redirect(f'/clients/{cid}/edit')
@@ -366,11 +366,11 @@ def register_client_routes(app, conn):
                 detail = '; '.join(f"{k.replace('_', ' ')}: '{old[k] or ''}' → '{vals[k]}'" for k in changed if k != 'notes')
                 if 'notes' in changed:
                     detail = (detail + '; notes updated').strip('; ')
-                log(c, cid, 'System', 'Client details updated', detail)
+                log(c, cid, 'System', 'Customer details updated', detail)
                 if 'name' in changed:   # keep the name shown on repairs in step
                     c.execute('UPDATE customer_repairs SET customer=? WHERE client_id=?', (vals['name'], cid))
                 c.commit()
-            c.close(); flash('Client saved' if changed else 'No changes'); return redirect(f'/clients/{cid}')
+            c.close(); flash('Customer saved' if changed else 'No changes'); return redirect(f'/clients/{cid}')
         c.close()
         return page(FORM_PAGE, c=old, types=ACCOUNT_TYPES, statuses=ACCOUNT_STATUSES, terms=PAYMENT_TERMS)
 

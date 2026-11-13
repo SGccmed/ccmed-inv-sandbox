@@ -57,8 +57,8 @@ ROLES = ["SuperAdmin", "Admin", "Sales", "Shipping", "Technician"]
 ADMIN_ROLES = {"SuperAdmin", "Admin"}
 ROLE_HELP = {
     "SuperAdmin": "Everything, including admin accounts, database restore and backups",
-    "Admin": "All inventory, clients, catalog and settings; manages Sales/Shipping/Technician staff",
-    "Sales": "Clients, repair tickets, pricing and approvals; sees purchase costs",
+    "Admin": "All inventory, customers, catalog and settings; manages Sales/Shipping/Technician staff",
+    "Sales": "Customers, repair tickets, pricing and approvals; sees purchase costs",
     "Shipping": "Receiving, shelf moves, repair tickets, and shipping repairs back",
     "Technician": "Repair evaluation and repair work, core updates, shelf moves; can open their own repair tickets",
 }

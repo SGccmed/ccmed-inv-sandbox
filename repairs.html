@@ -577,7 +577,7 @@
           <a class="nav" href="/inventory/new">+ New Inventory</a>
         {% endif %}
         {% if can('client_view') %}
-          <a class="nav" href="/clients">Clients</a>
+          <a class="nav" href="/clients">Customers</a>
         {% endif %}
         <a class="nav" href="/products">Product Database</a>
         <a class="nav" href="/cores">Core Repairs (CR)</a>
@@ -624,7 +624,7 @@
               <a href="/repairs?queue=closed" class="{% if queue=='closed' %}on{% endif %}">Closed<span>{{counts.get('Closed',0)}}</span></a>
             </div>
             <p class="hint" style="margin:-6px 0 14px">
-              My tickets = repairs assigned to you, plus repairs for clients you own as sales rep.
+              My tickets = repairs assigned to you, plus repairs for customers you own as sales rep.
             </p>
 
             <div class="stagecards">
@@ -646,10 +646,10 @@
                 {% endif %}
                 <div>
                   <label>Search this queue</label>
-                  <input name="q" value="{{q}}" placeholder="Ticket, RMA, client, serial, model, part number or location">
+                  <input name="q" value="{{q}}" placeholder="Ticket, RMA, customer, serial, model, part number or location">
                 </div>
                 <div>
-                  <label>Client's sales rep</label>
+                  <label>Customer's sales rep</label>
                   <select name="rep">
                     <option value="">Any rep</option>
                     {% for p in reps %}
@@ -689,7 +689,7 @@
                     <tr>
                       <th>{{ sort_header('ticket', 'Ticket', 'in_stage') }}</th>
                       <th>{{ sort_header('rma', 'RMA', 'in_stage') }}</th>
-                      <th>{{ sort_header('client', 'Client', 'in_stage') }}</th>
+                      <th>{{ sort_header('client', 'Customer', 'in_stage') }}</th>
                       <th>{{ sort_header('rep', 'Sales rep', 'in_stage') }}</th>
                       <th>{{ sort_header('equipment', 'Equipment', 'in_stage') }}</th>
                       <th>{{ sort_header('serial', 'Serial', 'in_stage') }}</th>
@@ -757,14 +757,14 @@
               <form method="post">
                 <div class="fields">
                   <div class="field">
-                    <label>Client *</label>
-                    <input name="customer" required list="client-list" value="{{preset_client}}" placeholder="Start typing a client name or CL- number" autocomplete="off">
+                    <label>Customer *</label>
+                    <input name="customer" required list="client-list" value="{{preset_client}}" placeholder="Start typing a customer name or CL- number" autocomplete="off">
                     <datalist id="client-list">
                       {% for c in client_options() %}
                         <option value="{{c.client_code}} · {{c.name}}">
                       {% endfor %}
                     </datalist>
-                    <div class="hint">Not listed? <a href="/clients/new" target="_blank">Add the client</a> first, then pick it here.</div>
+                    <div class="hint">Not listed? <a href="/clients/new" target="_blank">Add the customer</a> first, then pick it here.</div>
                   </div>
                   <div class="field">
                     <label>RMA number</label>
@@ -808,7 +808,7 @@
                   </div>
                   <div class="field wide">
                     <label>Intake notes</label>
-                    <textarea name="notes" rows="3" data-rich placeholder="What the client reported, what came in the box, visible damage, any loaner sent."></textarea>
+                    <textarea name="notes" rows="3" data-rich placeholder="What the customer reported, what came in the box, visible damage, any loaner sent."></textarea>
                   </div>
                 </div>
                 <div class="actions">
@@ -950,7 +950,7 @@
                   </div>
                   <div class="field">
                     <label>Ticket update</label>
-                    <textarea name="note" data-rich placeholder="What you checked, found or replaced; a call with the client; a part ordered; carrier and tracking number; partner and their RMA. Ctrl+B for bold."></textarea>
+                    <textarea name="note" data-rich placeholder="What you checked, found or replaced; a call with the customer; a part ordered; carrier and tracking number; partner and their RMA. Ctrl+B for bold."></textarea>
                   </div>
                   <div class="row3b">
                     <div class="field">
@@ -981,17 +981,17 @@
                   <form method="post" action="/repairs/{{r.id}}/update">
                     <input type="hidden" name="warranty_form" value="1">
                     <div class="fields">
-                      <div class="section-title">Client and equipment</div>
+                      <div class="section-title">Customer and equipment</div>
                       <div class="field">
-                        <label>Client</label>
-                        <input name="customer" value="{{client_text}}" required list="client-list" autocomplete="off" {% if not can('rma_client_edit') %}readonly title="Shipping, Sales or Admin can change the client"{% endif %}>
+                        <label>Customer</label>
+                        <input name="customer" value="{{client_text}}" required list="client-list" autocomplete="off" {% if not can('rma_client_edit') %}readonly title="Shipping, Sales or Admin can change the customer"{% endif %}>
                         <datalist id="client-list">
                           {% for c in client_options() %}
                             <option value="{{c.client_code}} · {{c.name}}">
                           {% endfor %}
                         </datalist>
                         {% if client and can('client_view') %}
-                          <div class="hint"><a href="/clients/{{client.id}}">Open client record →</a></div>
+                          <div class="hint"><a href="/clients/{{client.id}}">Open customer record →</a></div>
                         {% endif %}
                       </div>
                       <div class="field">
@@ -1066,7 +1066,7 @@
                         <div class="field">
                           <label>Quoted price ($)</label>
                           <input name="quoted_price" data-money value="{{'%.2f'|format(r.quoted_price) if r.quoted_price is not none else ''}}" placeholder="Set by the sales rep" {% if not can('repair_price') %}readonly{% endif %}>
-                          <div class="hint">What the client is charged. Recording it builds a price history per model.{% if can('cost_adjust') and r.quoted_price is not none %} To correct it with a reason on record, use <a href="#adjust">Adjust quoted price</a>.{% endif %}</div>
+                          <div class="hint">What the customer is charged. Recording it builds a price history per model.{% if can('cost_adjust') and r.quoted_price is not none %} To correct it with a reason on record, use <a href="#adjust">Adjust quoted price</a>.{% endif %}</div>
                         </div>
                         <div class="field">
                           <label>QuickBooks estimate #</label>

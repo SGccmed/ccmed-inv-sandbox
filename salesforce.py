@@ -1,10 +1,10 @@
-"""Salesforce account IDs on clients.
+"""Salesforce account IDs on customers.
 
-Salesforce stays the sales system (clients, contacts, tasks); this app keeps its own CL- numbers and stores
-each client's Salesforce Account ID beside it, so the two can be linked.
+Salesforce stays the sales system (customers, contacts, tasks); this app keeps its own CL- numbers and stores
+each customer's Salesforce Account ID beside it, so the two can be linked.
 
 Admins match IDs in bulk by uploading a Salesforce report exported as CSV (Account Name + Account ID).
-The upload shows a preview first; nothing changes until "Link selected clients" is clicked.
+The upload shows a preview first; nothing changes until "Link selected customers" is clicked.
 """
 import csv
 import io
@@ -28,19 +28,19 @@ def name_key(name):
 def pick_columns(headers):
     """Find the name, Salesforce ID and (optional) CL- number columns in a Salesforce export."""
     low = {h: (h or '').strip().lower() for h in headers}
-    name = next((h for h, l in low.items() if l in ('account name', 'name', 'client name', 'client')), None)
+    name = next((h for h, l in low.items() if l in ('account name', 'name', 'customer name', 'customer', 'client name', 'client')), None)
     name = name or next((h for h, l in low.items() if 'name' in l), None)
     sfid = next((h for h, l in low.items() if l in ('account id', 'salesforce id', 'salesforce account id', 'id', 'account id (18)',
                                                    'case safe id', '18 digit account id')), None)
     sfid = sfid or next((h for h, l in low.items() if 'id' in l.split() and 'client' not in l and 'parent' not in l), None)
-    code = next((h for h, l in low.items() if l in ('cl number', 'client id', 'client code', 'cl', 'app client id')), None)
+    code = next((h for h, l in low.items() if l in ('cl number', 'customer id', 'customer code', 'client id', 'client code', 'cl', 'app customer id', 'app client id')), None)
     return name, sfid, code
 
 
 IMPORT_PAGE = '''
-<p><a href="/clients">← Clients</a></p>
-<h1>Link clients to Salesforce</h1>
-<p class="muted">Salesforce stays the place for clients, contacts and tasks. Each client here keeps its CL- number and
+<p><a href="/clients">← Customers</a></p>
+<h1>Link customers to Salesforce</h1>
+<p class="muted">Salesforce stays the place for customers, contacts and tasks. Each customer here keeps its CL- number and
   also stores its Salesforce Account ID, so the two systems can be linked.</p>
 <section>
   <h2>1. Export from Salesforce</h2>
@@ -51,7 +51,7 @@ IMPORT_PAGE = '''
     <div style="flex:1;min-width:240px"><label>CSV file</label><input type="file" name="file" accept=".csv,text/csv" required></div>
     <div><button>Preview matches</button></div>
   </form>
-  <p class="muted">Nothing is saved at this step. Real client lists stay off the free sandbox; use the demo file for testing.</p>
+  <p class="muted">Nothing is saved at this step. Real customer lists stay off the free sandbox; use the demo file for testing.</p>
 </section>
 {% if rows %}
 <section>
@@ -65,7 +65,7 @@ IMPORT_PAGE = '''
   </div>
   <form method="post" action="/clients/salesforce/apply">
     <div style="overflow:auto"><table>
-      <tr><th></th><th>Salesforce name</th><th>Salesforce ID</th><th>App client</th><th>Result</th></tr>
+      <tr><th></th><th>Salesforce name</th><th>Salesforce ID</th><th>App customer</th><th>Result</th></tr>
       {% for r in rows %}
         <tr>
           <td>{% if r.status in ('new', 'change') %}<input type="checkbox" name="link" value="{{r.client_id}}|{{r.sfid}}" style="width:auto" {% if r.status=='new' %}checked{% endif %}>{% endif %}</td>
@@ -77,8 +77,8 @@ IMPORT_PAGE = '''
       {% endfor %}
     </table></div>
     <p class="muted">Ticked rows are linked. Rows that would replace an existing ID are not ticked; tick them only if Salesforce is right.
-      Unmatched names can be linked by hand on the client's Edit page.</p>
-    <button>Link selected clients</button>
+      Unmatched names can be linked by hand on the customer's Edit page.</p>
+    <button>Link selected customers</button>
   </form>
 </section>
 {% endif %}
@@ -130,7 +130,7 @@ def register_salesforce_routes(app, conn):
                 found = by_name.get(name_key(name), [])
                 match = found[0] if len(found) == 1 else None
                 if len(found) > 1:
-                    row.update(status='bad', note='Two app clients share this name; link it by hand')
+                    row.update(status='bad', note='Two app customers share this name; link it by hand')
             if match is not None:
                 row.update(client_id=match['id'], client_code=match['client_code'], client_name=match['name'])
             if 'status' in row:
@@ -140,7 +140,7 @@ def register_salesforce_routes(app, conn):
             elif sfid in seen:
                 row.update(status='bad', note=f'Same ID appears twice in the file (also on “{seen[sfid]}”)')
             elif match is None:
-                row.update(status='missing', note='No client with this name in the app')
+                row.update(status='missing', note='No customer with this name in the app')
             elif sfid in by_sfid and by_sfid[sfid]['id'] != match['id']:
                 other = by_sfid[sfid]
                 row.update(status='bad', note=f"ID already used by {other['client_code']} · {other['name']}")
@@ -178,5 +178,5 @@ def register_salesforce_routes(app, conn):
             linked += 1
         c.commit()
         c.close()
-        flash(f'Linked {linked} clients to Salesforce.' + (f' Skipped {skipped} (ID invalid or already in use).' if skipped else ''))
+        flash(f'Linked {linked} customers to Salesforce.' + (f' Skipped {skipped} (ID invalid or already in use).' if skipped else ''))
         return redirect('/clients')

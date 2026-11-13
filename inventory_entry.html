@@ -168,7 +168,7 @@
         <a href="/inventory">Inventory Dashboard</a>
         <a class="active" href="/inventory/new">+ New Inventory</a>
         {% if can('client_view') %}
-          <a href="/clients">Clients</a>
+          <a href="/clients">Customers</a>
         {% endif %}
         <a class="sideitem" href="/products">Product Database</a>
         <a href="/cores">Core Repairs (CR)</a>
@@ -222,10 +222,6 @@
                     <input name="location[]" list="dl-locations" data-strict autocomplete="off" placeholder="Pick a location">
                   </div>
                   <div class="field">
-                    <label>Supplier</label>
-                    <input name="supplier[]">
-                  </div>
-                  <div class="field">
                     <label>Purchase / Core Cost ($)</label>
                     <input name="cost[]" data-money type="number" step="0.01" min="0" placeholder="0.00">
                   </div>
@@ -248,8 +244,8 @@
                     <input name="notes[]">
                   </div>
                   <div class="field rpfield" style="display:none">
-                    <label>Customer (client) *</label>
-                    <input name="customer[]" list="client-list" placeholder="Start typing a client…">
+                    <label>Customer *</label>
+                    <input name="customer[]" list="client-list" placeholder="Start typing a customer…">
                   </div>
                   <div class="field rpfield" style="display:none">
                     <label>RMA number</label>
@@ -273,8 +269,8 @@
                 <option value="{{c.client_code}} · {{c.name}}">
               {% endfor %}
             </datalist>
-            <p class="muted" style="margin:0 0 12px">Client not in the list?
-              <a href="/clients/new" target="_blank">Add a new client</a> (opens in a new tab), then come back
+            <p class="muted" style="margin:0 0 12px">Customer not in the list?
+              <a href="/clients/new" target="_blank">Add a new customer</a> (opens in a new tab), then come back
               and pick it.</p>
             <div class="actions"><button type="button" class="secondary" onclick="addRow()">+ Add Another
               Row</button><button type="submit">Save All Items</button></div>
@@ -334,7 +330,6 @@
           el.style.display = rp ? 'block' : 'none';
           el.querySelectorAll('input').forEach(input => input.required = rp && ['customer[]'].includes(input.name))
         });
-        row.querySelector('[name="supplier[]"]').closest('.field').style.display = rp ? 'none' : 'block';
         // Loan and Rental are only for stock (CC); cores and repairs pick from the physical places.
         row.querySelector('[name="location[]"]').setAttribute('list', sel.value === 'CC' ? 'dl-locations' : 'dl-places');
         row.querySelector('[name="location[]"]').dispatchEvent(new Event('input', { bubbles: true }));

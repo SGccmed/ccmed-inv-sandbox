@@ -123,13 +123,13 @@ def amount(value,label,required=False):
  except ValueError:raise ValueError(label+' must be a nonnegative number')
 
 def entry_row(f):
- return {k:str(f.get(k,'') or '').strip() for k in ('type','manufacturer','product','serial','location','supplier','cost','condition','notes','customer','rma','technician','received_date')}
+ return {k:str(f.get(k,'') or '').strip() for k in ('type','manufacturer','product','serial','location','cost','condition','notes','customer','rma','technician','received_date')}
 
 @app.route('/inventory/new',methods=['GET','POST'])
 def inventory_new():
  if request.method=='GET':return render_template_string(ENTRY_TEMPLATE,today=date.today().isoformat())
  # Multiple-row entry is atomic: invalid rows do not result in partial receiving.
- f=request.form;fields=('type','manufacturer','product','serial','location','supplier','cost','condition','notes','customer','rma','technician','received_date')
+ f=request.form;fields=('type','manufacturer','product','serial','location','cost','condition','notes','customer','rma','technician','received_date')
  length=max((len(f.getlist(k+'[]')) for k in fields),default=0)
  rows=[];c=conn();ensure_entry_schema(c)
  for i in range(length):
@@ -138,11 +138,11 @@ def inventory_new():
   n=len(rows)+1
   if not row['type'] or row['type'] not in ('CC','CR','RP'):c.close();return f'Row {n}: select CC, CR or RP',400
   if not row['product']:c.close();return f'Row {n}: model / product is required',400
-  if row['type']=='RP' and not row['customer']:c.close();return f'Row {n}: a client is required for RP items (the RMA number is created automatically if left blank)',400
+  if row['type']=='RP' and not row['customer']:c.close();return f'Row {n}: a customer is required for RP items (the RMA number is created automatically if left blank)',400
   row['client']=None
   if row['type']=='RP':
    row['client']=resolve_client(c,row['customer'])
-   if row['client'] is None:c.close();return f'Row {n}: customer "{row["customer"]}" is not in the client list. Pick one from the list or add it under Clients first.',400
+   if row['client'] is None:c.close();return f'Row {n}: customer "{row["customer"]}" is not in the customer list. Pick one from the list or add it under Customers first.',400
   row['manufacturer'],problem=choices.check_manufacturer(row['manufacturer'])
   if problem:c.close();return f'Row {n}: '+problem,400
   if row['location']:
@@ -174,10 +174,10 @@ def inventory_new():
    if typ=='CC':
     c.execute("""INSERT INTO units(manufacturer,product_raw,product_key,serial,cost,dom,notes,location_raw,physical_location,status,condition,review,inventory_code,supplier,received_date,entry_batch_id)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-     (row['manufacturer'],row['product'],norm(row['product']),row['serial'],row['cost_value'],'',row['notes'],row['location'],row['location'],choices.location_status(row['location']),row['condition'] or 'Unspecified','',code,row['supplier'],received,batch))
+     (row['manufacturer'],row['product'],norm(row['product']),row['serial'],row['cost_value'],'',row['notes'],row['location'],row['location'],choices.location_status(row['location']),row['condition'] or 'Unspecified','',code,None,received,batch))
    elif typ=='CR':
     c.execute("""INSERT INTO core_items(inventory_code,manufacturer,product_raw,serial,location,supplier,original_cost,notes,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?)""",(code,row['manufacturer'],row['product'],row['serial'],row['location'],row['supplier'],row['cost_value'],row['notes'],now_iso()))
+     VALUES (?,?,?,?,?,?,?,?,?)""",(code,row['manufacturer'],row['product'],row['serial'],row['location'],None,row['cost_value'],row['notes'],now_iso()))
    else:
     # Customer repair ticket (see repairs.py); a blank RMA gets the next RMA-##### number.
     R.create_ticket(c,client=row['client'],rma=row['rma'],received=received,code=code,

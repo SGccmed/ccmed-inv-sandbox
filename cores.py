@@ -224,7 +224,7 @@ def register_core_routes(app, conn, base_dir, inventory_code_maker, norm):
                                status, condition, review, inventory_code, supplier, received_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                             (core['manufacturer'], core['product_raw'], norm(core['product_raw']), core['serial'], total,
                              'Converted from ' + core['inventory_code'] + '; ' + (core['notes'] or ''), core['location'], core['location'],
-                             'Active', 'Refurbished', '', code, core['supplier'], date.today().isoformat()))
+                             'Active', 'Refurbished', '', code, None, date.today().isoformat()))
             now = now_iso()
             c.execute('UPDATE core_items SET stage=?, stage_started_at=?, converted_unit_id=? WHERE id=?',
                       ('Converted to Stock', now, cur.lastrowid, cid))

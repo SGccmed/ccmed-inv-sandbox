@@ -1,4 +1,4 @@
-"""Search everything: clients, repair tickets, stock and cores.
+"""Search everything: customers, repair tickets, stock and cores.
 
 - The box in every sidebar (search_box.html) asks /api/search for suggestions as you type.
 - Pressing Enter opens /search. If exactly one record matches (or one matches exactly), it opens
@@ -9,7 +9,7 @@ from flask import flash, jsonify, redirect, render_template_string, request
 from auth import can
 import clients as CL
 
-GROUPS = ['Clients', 'Repair tickets', 'Stock', 'Cores']
+GROUPS = ['Customers', 'Repair tickets', 'Stock', 'Cores']
 PER_GROUP = 50
 
 
@@ -38,7 +38,7 @@ def run_search(c, q, limit=PER_GROUP):
             sub = ' · '.join(x for x in [r['client_code'], r['status'], f"rep: {r['account_owner']}" if r['account_owner'] else '',
                                         f"{r['open_rmas']} open repairs" if r['open_rmas'] else ''] if x)
             exact = key in (squash(r['name']), squash(r['client_code']), squash(r['salesforce_id']))
-            out['Clients'].append({'kind': 'Client', 'label': r['name'], 'sub': sub, 'url': f"/clients/{r['id']}", 'exact': exact})
+            out['Customers'].append({'kind': 'Customer', 'label': r['name'], 'sub': sub, 'url': f"/clients/{r['id']}", 'exact': exact})
 
     rows = c.execute(f"""
         SELECT * FROM customer_repairs
@@ -81,7 +81,7 @@ RESULTS_PAGE = '''
 <div class="toolbar" style="justify-content:space-between">
   <div>
     <h1>Search</h1>
-    <div class="muted">Clients, repair tickets, stock and cores. Serials match with or without spaces.</div>
+    <div class="muted">Customers, repair tickets, stock and cores. Serials match with or without spaces.</div>
   </div>
 </div>
 <section>
@@ -89,14 +89,14 @@ RESULTS_PAGE = '''
     <div style="flex:1;min-width:240px">
       <label>Search for</label>
       <input type="hidden" name="all" value="1">
-      <input name="q" value="{{q}}" placeholder="Client name, CL- number, ticket, RMA, serial, model, Salesforce ID…" autofocus>
+      <input name="q" value="{{q}}" placeholder="Customer name, CL- number, ticket, RMA, serial, model, Salesforce ID…" autofocus>
     </div>
     <div><button>Search</button></div>
   </form>
 </section>
 {% if q and total == 0 %}
   <section>
-    <p>Nothing matches “{{q}}”. Try fewer letters, part of a serial, or the client's CL- number.</p>
+    <p>Nothing matches “{{q}}”. Try fewer letters, part of a serial, or the customer's CL- number.</p>
   </section>
 {% endif %}
 {% for group in groups %}

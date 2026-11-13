@@ -71,7 +71,6 @@ def new_code(prefix, days_ago):
     c.execute('UPDATE inventory_id_sequence SET generated_id=? WHERE seq=?', (code, cur.lastrowid)); return code
 def serial(): return 'DM' + ''.join(rnd.choice('ABCDEFGHJKLMNPRSTUVWXYZ0123456789') for _ in range(8))
 SHELVES = A.choices.SHELVES + ['T1', 'UG', '2D']          # locations from choices.py
-SUPPLIERS = ['Demo Medical Brokers', 'Sample Imaging Supply', 'Test Trade-In Co.', 'Placeholder Auctions']
 ALL_MODELS = [(m, x, 'SYS') for m, x in SYSTEMS] + [(m, x, 'PRB') for m, x, _ in PROBES] + [(m, x, 'PTS') for m, x in PARTS]
 def price(cat): return {'SYS': rnd.randrange(8000, 45000, 250), 'PRB': rnd.randrange(900, 7500, 50), 'PTS': rnd.randrange(80, 1800, 10)}[cat]
 
@@ -106,7 +105,7 @@ for b_days in (45, 21, 9, 2):
         shelf = 'Rental' if status == 'Rental' else rnd.choice(SHELVES)
         c.execute('INSERT INTO units(manufacturer,product_raw,product_key,serial,cost,dom,notes,location_raw,physical_location,status,condition,review,inventory_code,supplier,received_date,entry_batch_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             (m, f'{m} {x}', A.norm(f'{m} {x}'), serial(), float(price(cat)), '', 'Demo receiving', shelf, shelf, status,
-             rnd.choice(['New','Refurbished','Used - Good']), '', new_code('CC', b_days), rnd.choice(SUPPLIERS), d(b_days), batch))
+             rnd.choice(['New','Refurbished','Used - Good']), '', new_code('CC', b_days), None, d(b_days), batch))
 
 # Location transfers and internal repair orders on some active units
 active = [r[0] for r in c.execute("SELECT id FROM units WHERE status='Active' ORDER BY id")]
@@ -205,7 +204,7 @@ for i, (stage, steps) in enumerate(core_plan):
     m, x, cat = rnd.choice([t for t in ALL_MODELS if t[2] == 'PRB'])
     age = rnd.randint(12, 50); code = new_code('CR', age); orig = float(rnd.randrange(150, 1500, 25))
     cid = c.execute('INSERT INTO core_items(inventory_code,manufacturer,product_raw,serial,location,supplier,original_cost,stage,notes,created_at,stage_started_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-        (code, m, f'{m} {x}', serial(), rnd.choice(['C1','C2','C3']), rnd.choice(SUPPLIERS), orig, 'Needs Repair', 'Demo core', ts(age), ts(age))).lastrowid
+        (code, m, f'{m} {x}', serial(), rnd.choice(['C1','C2','C3']), None, orig, 'Needs Repair', 'Demo core', ts(age), ts(age))).lastrowid
     path = CORE_STEPS[:steps] if stage != 'On Hold' else ['On Hold']
     prev = 'Needs Repair'
     for k, st in enumerate(path):
@@ -227,7 +226,7 @@ for i, (stage, steps) in enumerate(core_plan):
         core = c.execute('SELECT * FROM core_items WHERE id=?', (cid,)).fetchone()
         rc = c.execute('SELECT COALESCE(SUM(labor_cost+parts_cost+other_cost),0) FROM core_transactions WHERE core_id=?', (cid,)).fetchone()[0]
         uid = c.execute('INSERT INTO units(manufacturer,product_raw,product_key,serial,cost,notes,location_raw,physical_location,status,condition,review,inventory_code,supplier,received_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-            (m, core['product_raw'], A.norm(core['product_raw']), core['serial'], round(orig + rc, 2), 'Converted from ' + code, 'A3', 'A3', 'Active', 'Refurbished', '', new_code('CC', 1), core['supplier'], d(1))).lastrowid
+            (m, core['product_raw'], A.norm(core['product_raw']), core['serial'], round(orig + rc, 2), 'Converted from ' + code, 'A3', 'A3', 'Active', 'Refurbished', '', new_code('CC', 1), None, d(1))).lastrowid
         c.execute("""INSERT INTO core_transactions(core_id,performed_at,technician,description,labor_method,labor_hours,labor_rate,labor_cost,
                      parts_cost,other_cost,work_date,actor,old_stage,new_stage) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                   (cid, ts(1), 'Admin (demo)', 'Converted to stock.', 'none', 0, 0, 0, 0, 0, d(1), 'sgascoine', 'Ready for Stock', 'Converted to Stock'))
@@ -251,11 +250,11 @@ for i, (name, (typ, status, terms, owner)) in enumerate(CLIENT_INFO.items(), sta
     cid = c.execute("""INSERT INTO clients(name,account_type,status,phone,email,website,billing_address,shipping_address,payment_terms,tax_exempt,account_owner,notes,created_at,updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (name, typ, status, f'(555) 01{i:02d}-{rnd.randint(1000, 9999)}', f'info@{slug}.example', f'www.{slug}.example',
         addr, addr if rnd.random() < 0.6 else addr.replace('Suite', 'Receiving Dock'), terms, 1 if typ == 'Hospital' else 0, owner,
-        'DEMO client: fake contact details.', ts(age), ts(age))).lastrowid
+        'DEMO customer: fake contact details.', ts(age), ts(age))).lastrowid
     c.execute('UPDATE clients SET client_code=? WHERE id=?', (f'CL-{cid:05d}', cid)); client_ids[name] = cid
     if status != 'Prospect':     # fake Salesforce Account IDs (prospects are left unlinked to show the CSV import)
         c.execute('UPDATE clients SET salesforce_id=? WHERE id=?', (f'001DM{cid:010d}AAA', cid))
-    c.execute('INSERT INTO client_activity(client_id,kind,subject,details,actor,created_at) VALUES (?,?,?,?,?,?)', (cid, 'System', 'Client created', f'Client record created for {name}', owner, ts(age)))
+    c.execute('INSERT INTO client_activity(client_id,kind,subject,details,actor,created_at) VALUES (?,?,?,?,?,?)', (cid, 'System', 'Customer created', f'Customer record created for {name}', owner, ts(age)))
     for k in range(rnd.randint(1, 3)):
         nm = f'{rnd.choice(FIRST)} {rnd.choice(LAST)}'
         c.execute('INSERT INTO client_contacts(client_id,name,title,phone,email,is_primary,created_at) VALUES (?,?,?,?,?,?,?)',

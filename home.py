@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS user_pages (
 RECENT_KEEP = 8
 # Only individual records go into "Recent" (lists and searches don't).
 RECORD_PAGES = [(re.compile(r'^/repairs/\d+$'), 'Repair ticket'), (re.compile(r'^/cores/\d+$'), 'Core'),
-                (re.compile(r'^/unit/\d+$'), 'Stock item'), (re.compile(r'^/clients/\d+$'), 'Client'),
+                (re.compile(r'^/unit/\d+$'), 'Stock item'), (re.compile(r'^/clients/\d+$'), 'Customer'),
                 (re.compile(r'^/products/\d+$'), 'Product')]
 
 
@@ -74,7 +74,7 @@ def register_home_routes(app, conn, base_dir):
         open_rows = [R.ticket_view(r) for r in c.execute(
             "SELECT r.*, cl.account_owner FROM customer_repairs r LEFT JOIN clients cl ON cl.id=r.client_id WHERE r.stage<>'Closed'")]
         mine = [t for t in open_rows if t['assigned_to'] == me or t.get('account_owner') == me]
-        tiles.append({'label': 'My open tickets', 'count': len(mine), 'hint': 'Assigned to you, or your clients',
+        tiles.append({'label': 'My open tickets', 'count': len(mine), 'hint': 'Assigned to you, or your customers',
                       'url': '/repairs?queue=mine', 'tone': ''})
         for team in sorted(R.user_teams()):
             waiting = [t for t in open_rows if t['team'] == team]

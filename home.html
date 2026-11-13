@@ -633,7 +633,7 @@
           <a class="nav" href="/inventory/new">+ New Inventory</a>
         {% endif %}
         {% if can('client_view') %}
-          <a class="nav" href="/clients">Clients</a>
+          <a class="nav" href="/clients">Customers</a>
         {% endif %}
         <a class="nav" href="/products">Product Database</a>
         <a class="nav" href="/cores">Core Repairs (CR)</a>
@@ -652,10 +652,10 @@
 
           <div class="hero">
             <h1>Hi {{g.user.full_name or g.user.username}}, what are you looking for?</h1>
-            <div class="muted">Clients, repair tickets, RMAs, serial numbers, stock and cores</div>
+            <div class="muted">Customers, repair tickets, RMAs, serial numbers, stock and cores</div>
             <form class="bigsearch gsearch-home" action="/search" method="get" autocomplete="off">
               <input name="q" type="search" autofocus aria-label="Search everything"
-                placeholder="Type a client, ticket, RMA or serial number…"
+                placeholder="Type a customer, ticket, RMA or serial number…"
                 oninput="gsSuggest(this)" onkeydown="gsKey(event, this)" onblur="setTimeout(function () { gsHide() }, 200)">
               <div class="gs-list"></div>
             </form>
@@ -665,7 +665,7 @@
               <a href="/repairs">Repair queue</a>
               <a href="/cores">Core repairs</a>
               <a href="/inventory">Inventory</a>
-              {% if can('client_view') %}<a href="/clients">Clients</a>{% endif %}
+              {% if can('client_view') %}<a href="/clients">Customers</a>{% endif %}
             </div>
           </div>
 
@@ -695,7 +695,7 @@
                     </form>
                   </li>
                 {% else %}
-                  <li class="muted">No favorites yet. Click ☆ Favorite at the top right of any page (a ticket, a filtered queue, a client) to pin it here.</li>
+                  <li class="muted">No favorites yet. Click ☆ Favorite at the top right of any page (a ticket, a filtered queue, a customer) to pin it here.</li>
                 {% endfor %}
               </ul>
             </div>
@@ -711,7 +711,7 @@
                     <span class="muted">{{p.at|daytime}}</span>
                   </li>
                 {% else %}
-                  <li class="muted">Records you open (tickets, cores, stock items, clients) will show up here.</li>
+                  <li class="muted">Records you open (tickets, cores, stock items, customers) will show up here.</li>
                 {% endfor %}
               </ul>
             </div>

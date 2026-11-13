@@ -37,12 +37,12 @@ STAGES = {
     'Eval Complete': {
         'team': 'Sales', 'hold': False,
         'guide': "Sales: price the repair from the findings, enter the quoted price and the QuickBooks "
-                 "estimate number, send the quote to the client, then move it to Awaiting Approval. "
+                 "estimate number, send the quote to the customer, then move it to Awaiting Approval. "
                  "Warranty tickets skip straight to Approved at $0.",
     },
     'Awaiting Approval': {
         'team': 'Sales', 'hold': True,
-        'guide': "Waiting on the client (on hold, so these days don't count against the team). When they "
+        'guide': "Waiting on the customer (on hold, so these days don't count against the team). When they "
                  "answer, move it to Approved or Declined.",
     },
     'Approved': {
@@ -62,11 +62,11 @@ STAGES = {
     },
     'Repair Complete': {
         'team': 'Sales', 'hold': False,
-        'guide': "Sales: tell the client it's done, then release it to Shipping (Ready to Ship).",
+        'guide': "Sales: tell the customer it's done, then release it to Shipping (Ready to Ship).",
     },
     'Ready to Ship': {
         'team': 'Shipping', 'hold': False,
-        'guide': "Shipping: pack it and send it back to the client. Add the carrier and tracking number "
+        'guide': "Shipping: pack it and send it back to the customer. Add the carrier and tracking number "
                  "as a work-log note, then move it to Shipped.",
     },
     'Shipped': {
@@ -82,16 +82,16 @@ STAGES = {
         'team': 'Sales', 'hold': True,
         'guide': "Outsourced (on hold). Log the partner, their price and any partner RMA in the work log. "
                  "Partner's report in: move to Eval Complete. Repair done: move to Ready to Ship, or to "
-                 "Shipped if the partner blind-ships to the client on our label.",
+                 "Shipped if the partner blind-ships to the customer on our label.",
     },
     'Declined': {
         'team': 'Sales', 'hold': False,
-        'guide': "The client said no. It goes back free (no eval fee, CC pays shipping): release it to "
+        'guide': "The customer said no. It goes back free (no eval fee, CC pays shipping): release it to "
                  "Shipping. The ticket will close as Declined.",
     },
     'Unrepairable': {
         'team': 'Sales', 'hold': False,
-        'guide': "It can't be fixed. Sales: offer the client an exchange. If they accept, close the ticket "
+        'guide': "It can't be fixed. Sales: offer the customer an exchange. If they accept, close the ticket "
                  "as Exchanged (the core and replacement are handled by hand for now). If not, release it "
                  "to Shipping to send it back.",
     },
@@ -235,7 +235,7 @@ def tech_list(c):
 
 
 def sales_reps(c):
-    """Everyone who can own a client: Sales staff plus any account owner already on a client."""
+    """Everyone who can own a customer: Sales staff plus any account owner already on a customer."""
     names = {r['username'] for r in c.execute("SELECT username, roles FROM users WHERE active=1")
              if 'Sales' in (r['roles'] or '').split(',')}
     names |= {r[0] for r in c.execute("SELECT DISTINCT account_owner FROM clients WHERE COALESCE(account_owner,'')<>''")}
@@ -446,7 +446,7 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
             c.close(); flash("Your role can't create repair tickets."); return redirect(url_for('repairs'))
         client = resolve_client(c, f.get('customer', ''))
         if client is None:
-            c.close(); flash('Pick the client from the list, or add them under Clients first.')
+            c.close(); flash('Pick the customer from the list, or add them under Customers first.')
             return redirect(url_for('repair_new'))
         assigned = f.get('assigned_to', '').strip()
         roles = roles_of(g.user)
@@ -565,7 +565,7 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
             if 'customer' in f:
                 client = resolve_client(c, f.get('customer', ''))
                 if client is None:
-                    c.close(); flash('Pick the client from the list.'); return redirect(url_for('repair_detail', rid=rid))
+                    c.close(); flash('Pick the customer from the list.'); return redirect(url_for('repair_detail', rid=rid))
                 changes['customer'] = client['name']; changes['client_id'] = client['id']
             if 'rma' in f and text('rma'):
                 changes['rma'] = text('rma')
