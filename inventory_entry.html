@@ -66,6 +66,15 @@
         padding: 16px;
         margin-bottom: 12px
       }
+      .row.row-error {
+        border: 2px solid #c0392b;
+        background: #fffafa
+      }
+      .notice.bad {
+        background: #fdecea;
+        border-color: #f2b8b0;
+        color: #8e1f15
+      }
       .rowhead {
         display: flex;
         justify-content: space-between;
@@ -166,6 +175,9 @@
         <h1>New Inventory Entry</h1>
         <div class="muted">Add one item or several items together. Each item receives its own CC, RP or CR
           inventory ID using one shared continuous sequence.</div>
+        {% if error %}
+          <div class="notice bad"><strong>Nothing was saved yet.</strong> {{ error }} Everything you typed is still below{% if error_row %} (the item to fix is outlined in red){% endif %}.</div>
+        {% endif %}
         {% with messages=get_flashed_messages() %}
           {% for m in messages %}
             <div class="notice {% if m.startswith('⚠') %}warn{% endif %}">{{m}}</div>
@@ -180,86 +192,86 @@
               can share serials.
           </div>
           <form method="post" id="entryform">
+            {# rows_back: the rows sent back when something needs fixing (nothing is lost); otherwise one empty row #}
             <div id="rows">
-              <div class="row">
-                <div class="rowhead"><strong>Item
-                  <span class="rownum">1</span></strong><button type="button" class="secondary" onclick="removeRow(this)">Remove</button></div>
-                <div class="fields">
-                  <div class="field">
-                    <label>Inventory Type *</label>
-                    <select name="type[]" required onchange="typeChange(this)">
-                    <option value="CC">CC — Stock</option>
-                    <option value="CR">CR — Core / Bad</option>
-                    <option value="RP">RP — Customer Repair</option>
-                    </select>
+              {% for r in rows_back or [{}] %}
+                {% set typ = r.type or 'CC' %}
+                <div class="row{% if error_row == loop.index %} row-error{% endif %}">
+                  <div class="rowhead"><strong>Item
+                    <span class="rownum">{{ loop.index }}</span></strong><button type="button" class="secondary" onclick="removeRow(this)">Remove</button></div>
+                  <div class="fields">
+                    <div class="field">
+                      <label>Inventory Type *</label>
+                      <select name="type[]" required onchange="typeChange(this)">
+                        <option value="CC" {% if typ == 'CC' %}selected{% endif %}>CC — Stock</option>
+                        <option value="CR" {% if typ == 'CR' %}selected{% endif %}>CR — Core / Bad</option>
+                        <option value="RP" {% if typ == 'RP' %}selected{% endif %}>RP — Customer Repair</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label>Manufacturer</label>
+                      <input name="manufacturer[]" value="{{ r.manufacturer or '' }}" data-combo="dl-manufacturers" data-strict autocomplete="off" placeholder="Pick a manufacturer">
+                    </div>
+                    <div class="field">
+                      <label>Model / Product *</label>
+                      <input name="product[]" value="{{ r.product or '' }}" required data-combo="dl-products" data-catalog-note autocomplete="off" placeholder="Pick or type, e.g. C1-6-D">
+                      <input type="hidden" name="product_id[]" value="{{ r.product_id or '' }}">
+                    </div>
+                    <div class="field">
+                      <label>Serial Number</label>
+                      <input name="serial[]" value="{{ r.serial or '' }}" oninput="snCheck(this)" autocomplete="off">
+                    </div>
+                    <div class="field">
+                      <label>Location</label>
+                      <input name="location[]" value="{{ r.location or '' }}" data-combo="{{ 'dl-locations' if typ == 'CC' else 'dl-places' }}" data-strict autocomplete="off" placeholder="Pick a location">
+                    </div>
+                    <div class="field" {% if typ == 'RP' %}style="display:none"{% endif %}>
+                      <label>Purchase / Core Cost ($)</label>
+                      <input name="cost[]" value="{{ r.cost or '' }}" data-money type="number" step="0.01" min="0" placeholder="0.00">
+                    </div>
+                    <div class="field">
+                      <label>Condition</label>
+                      <select name="condition[]">
+                        <option value="">Unspecified</option>
+                        {% for cond in ['New', 'Used', 'Refurbished', 'For Parts'] %}
+                          <option {% if r.condition == cond %}selected{% endif %}>{{ cond }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label>Date Received</label>
+                      <input name="received_date[]" type="date" value="{{ r.received_date or today }}">
+                    </div>
+                    <div class="field">
+                      <label>Notes</label>
+                      <input name="notes[]" value="{{ r.notes or '' }}">
+                    </div>
+                    <div class="field rpfield" {% if typ != 'RP' %}style="display:none"{% endif %}>
+                      <label>Customer *</label>
+                      <input name="customer[]" value="{{ r.customer or '' }}" data-combo="customers" data-strict {% if typ == 'RP' %}required{% endif %} placeholder="Start typing a customer…">
+                    </div>
+                    <div class="field rpfield" {% if typ != 'RP' %}style="display:none"{% endif %}>
+                      <label>RMA number</label>
+                      <input name="rma[]" value="{{ r.rma or '' }}" placeholder="Blank = next RMA number">
+                    </div>
+                    <div class="field rpfield" {% if typ != 'RP' %}style="display:none"{% endif %}>
+                      <label>Assigned tech</label>
+                      <select name="technician[]">
+                        <option value="">Not assigned yet</option>
+                        {% for t in tech_options() %}
+                          <option value="{{t.username}}" {% if r.technician == t.username %}selected{% endif %}>{{t.name}}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div class="snalert"></div>
                   </div>
-                  <div class="field">
-                    <label>Manufacturer</label>
-                    <input name="manufacturer[]" list="dl-manufacturers" data-strict autocomplete="off" placeholder="Pick a manufacturer">
-                  </div>
-                  <div class="field">
-                    <label>Model / Product *</label>
-                    <input name="product[]" required list="dl-products" autocomplete="off" placeholder="Pick or type, e.g. C1-6-D">
-                  </div>
-                  <div class="field">
-                    <label>Serial Number</label>
-                    <input name="serial[]" oninput="snCheck(this)" autocomplete="off">
-                  </div>
-                  <div class="field">
-                    <label>Location</label>
-                    <input name="location[]" list="dl-locations" data-strict autocomplete="off" placeholder="Pick a location">
-                  </div>
-                  <div class="field">
-                    <label>Purchase / Core Cost ($)</label>
-                    <input name="cost[]" data-money type="number" step="0.01" min="0" placeholder="0.00">
-                  </div>
-                  <div class="field">
-                    <label>Condition</label>
-                    <select name="condition[]">
-                    <option value="">Unspecified</option>
-                    <option>New</option>
-                    <option>Used</option>
-                    <option>Refurbished</option>
-                    <option>For Parts</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label>Date Received</label>
-                    <input name="received_date[]" type="date" value="{{today}}">
-                  </div>
-                  <div class="field">
-                    <label>Notes</label>
-                    <input name="notes[]">
-                  </div>
-                  <div class="field rpfield" style="display:none">
-                    <label>Customer *</label>
-                    <input name="customer[]" list="client-list" placeholder="Start typing a customer…">
-                  </div>
-                  <div class="field rpfield" style="display:none">
-                    <label>RMA number</label>
-                    <input name="rma[]" placeholder="Blank = next RMA number">
-                  </div>
-                  <div class="field rpfield" style="display:none">
-                    <label>Assigned tech</label>
-                    <select name="technician[]">
-                      <option value="">Not assigned yet</option>
-                      {% for t in tech_options() %}
-                        <option value="{{t.username}}">{{t.name}}</option>
-                      {% endfor %}
-                    </select>
-                  </div>
-                  <div class="snalert"></div>
                 </div>
-              </div>
+              {% endfor %}
             </div>
+            {# Model suggestions from the Product Database (the drop-down is in page_tools.html) #}
             <datalist id="dl-products">
               {% for p in product_options() %}
-                <option value="{{ p.model }}">{{ p.display_name }}</option>
-              {% endfor %}
-            </datalist>
-            <datalist id="client-list">
-              {% for c in client_options() %}
-                <option value="{{c.client_code}} · {{c.name}}">
+                <option value="{{ p.model }}" data-id="{{ p.id }}" data-name="{{ p.display_name }}" data-mfr="{{ p.manufacturer or '' }}" data-type="{{ p.type }}">
               {% endfor %}
             </datalist>
             <p class="muted" style="margin:0 0 12px">Customer not in the list?
@@ -324,8 +336,9 @@
           el.querySelectorAll('input').forEach(input => input.required = rp && ['customer[]'].includes(input.name))
         });
         // Loan and Rental are only for stock (CC); cores and repairs pick from the physical places.
-        row.querySelector('[name="location[]"]').setAttribute('list', sel.value === 'CC' ? 'dl-locations' : 'dl-places');
+        row.querySelector('[name="location[]"]').setAttribute('data-combo', sel.value === 'CC' ? 'dl-locations' : 'dl-places');
         row.querySelector('[name="location[]"]').dispatchEvent(new Event('input', { bubbles: true }));
+        if (window.comboRefresh) window.comboRefresh(row.querySelector('[name="product[]"]'));   // yellow catalog note is for stock only
         row.querySelector('[name="cost[]"]').closest('.field').style.display = rp ? 'none' : 'block'
       }
 
@@ -336,7 +349,9 @@
           el.required = false
         });
         row.querySelectorAll('select').forEach(el => el.selectedIndex = 0);
-        row.querySelectorAll('.money-warn').forEach(el => el.remove());
+        row.querySelectorAll('.money-warn, .catalog-note').forEach(el => el.remove());
+        row.classList.remove('row-error');
+        row.querySelectorAll('[data-combo]').forEach(el => { delete el.dataset.okValue; delete el.dataset.state });
         row.querySelectorAll('.money-bad').forEach(el => el.classList.remove('money-bad'));
         const sa = row.querySelector('.snalert');
         sa.style.display = 'none';

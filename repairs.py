@@ -352,6 +352,7 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
     template = add_user_block((Path(base_dir) / 'repairs.html').read_text(encoding='utf-8'))
 
     def render(**ctx):
+        ctx.setdefault('fv', {})          # values typed into the new-ticket form (kept when it's sent back)
         return render_template_string(template, stages=STAGES, stage_names=STAGE_NAMES, open_stages=OPEN_STAGES,
                                       teams=TEAMS, resolutions=RESOLUTIONS, **ctx)
 
@@ -444,10 +445,17 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
         f = request.form
         if not can('rma_create'):
             c.close(); flash("Your role can't create repair tickets."); return redirect(url_for('repairs'))
+
+        def send_back(message):
+            # v1.14: show the form again with everything that was typed, instead of an empty form.
+            techs = tech_list(c); suggestion = next_rma(c); c.close()
+            flash(message)
+            return render(mode='new', today=today_pacific().isoformat(), preset_client='', techs=techs,
+                          rma_suggestion=suggestion, assign_default='', fv=f.to_dict()), 400
+
         client = resolve_client(c, f.get('customer', ''))
         if client is None:
-            c.close(); flash('Pick the customer from the list, or add them under Customers first.')
-            return redirect(url_for('repair_new'))
+            return send_back('Pick the customer from the list, or add them under Customers first.')
         assigned = f.get('assigned_to', '').strip()
         roles = roles_of(g.user)
         if not assigned and 'Technician' in roles and not (roles & ADMIN_ROLES):
@@ -455,24 +463,24 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
         fields = {k: f.get(k, '').strip() for k in ('manufacturer', 'model', 'part_number', 'serial', 'location', 'notes')}
         fields['manufacturer'], problem = choices.check_manufacturer(fields['manufacturer'])
         if problem:
-            c.close(); flash(problem); return redirect(url_for('repair_new'))
+            return send_back(problem)
         if fields['location']:
             fields['location'] = choices.location(fields['location']) or ''
             if fields['location'] not in choices.PLACES:
-                c.close(); flash('Pick the location from the list.'); return redirect(url_for('repair_new'))
+                return send_back('Pick the location from the list.')
         received = f.get('received_date', '').strip()
         try:
             date.fromisoformat(received)
         except ValueError:
-            c.close(); flash('Enter a valid received date.'); return redirect(url_for('repair_new'))
+            return send_back('Enter a valid received date.')
         try:
             rid = create_ticket(c, client=client, rma=f.get('rma', ''), received=received,
                                 fields=fields,
                                 assigned_to=assigned, note='Ticket created')
             c.commit()
         except sqlite3.IntegrityError:
-            c.rollback(); c.close(); flash('That RMA number is already used. Each repair needs its own RMA.')
-            return redirect(url_for('repair_new'))
+            c.rollback()
+            return send_back('That RMA number is already used. Each repair needs its own RMA.')
         prior = serial_matches(c, f.get('serial', ''), exclude=('repair', rid))
         code = c.execute('SELECT inventory_code, rma FROM customer_repairs WHERE id=?', (rid,)).fetchone()
         c.close()

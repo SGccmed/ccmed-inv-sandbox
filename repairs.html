@@ -735,57 +735,52 @@
                 <div class="fields">
                   <div class="field">
                     <label>Customer *</label>
-                    <input name="customer" required list="client-list" value="{{preset_client}}" placeholder="Start typing a customer name or CL- number" autocomplete="off">
-                    <datalist id="client-list">
-                      {% for c in client_options() %}
-                        <option value="{{c.client_code}} · {{c.name}}">
-                      {% endfor %}
-                    </datalist>
+                    <input name="customer" required data-combo="customers" data-strict value="{{fv.customer or preset_client}}" placeholder="Start typing a customer name or CL- number" autocomplete="off">
                     <div class="hint">Not listed? <a href="/clients/new" target="_blank">Add the customer</a> first, then pick it here.</div>
                   </div>
                   <div class="field">
                     <label>RMA number</label>
-                    <input name="rma" maxlength="100" placeholder="Leave blank to use {{rma_suggestion}}">
+                    <input name="rma" maxlength="100" value="{{fv.rma or ''}}" placeholder="Leave blank to use {{rma_suggestion}}">
                     <div class="hint">We issue RMA numbers. Leave it blank and the next one is used automatically.</div>
                   </div>
                   <div class="field">
                     <label>Manufacturer</label>
-                    <input name="manufacturer" list="dl-manufacturers" data-strict autocomplete="off" placeholder="Pick a manufacturer">
+                    <input name="manufacturer" value="{{fv.manufacturer or ''}}" data-combo="dl-manufacturers" data-strict autocomplete="off" placeholder="Pick a manufacturer">
                   </div>
                   <div class="field">
                     <label>Model</label>
-                    <input name="model" placeholder="e.g. C1-6-D">
+                    <input name="model" value="{{fv.model or ''}}" data-combo="dl-products" placeholder="Pick or type, e.g. C1-6-D">
                   </div>
                   <div class="field">
                     <label>Part number</label>
-                    <input name="part_number" placeholder="OEM part number, if known">
+                    <input name="part_number" value="{{fv.part_number or ''}}" placeholder="OEM part number, if known">
                   </div>
                   <div class="field">
                     <label>Serial number</label>
-                    <input name="serial" placeholder="As printed on the unit">
+                    <input name="serial" value="{{fv.serial or ''}}" placeholder="As printed on the unit">
                     <div class="hint">If this serial was here before, the ticket will show its past repairs (useful for warranty).</div>
                   </div>
                   <div class="field">
                     <label>Location</label>
-                    <input name="location" list="dl-places" data-strict autocomplete="off" placeholder="Pick a location, e.g. Repair">
+                    <input name="location" value="{{fv.location or ''}}" data-combo="dl-places" data-strict autocomplete="off" placeholder="Pick a location, e.g. Repair">
                   </div>
                   <div class="field">
                     <label>Date received *</label>
-                    <input name="received_date" type="date" value="{{today}}" required>
+                    <input name="received_date" type="date" value="{{fv.received_date or today}}" required>
                   </div>
                   <div class="field">
                     <label>Assigned tech</label>
                     <select name="assigned_to">
                       <option value="">Not assigned yet</option>
                       {% for t in techs %}
-                        <option value="{{t.username}}" {% if t.username==assign_default %}selected{% endif %}>{{t.name}}</option>
+                        <option value="{{t.username}}" {% if t.username==(fv.assigned_to if fv else assign_default) %}selected{% endif %}>{{t.name}}</option>
                       {% endfor %}
                     </select>
                     <div class="hint">Optional. A tech can also assign themselves when they pick it up. Technicians opening a ticket are assigned to it.</div>
                   </div>
                   <div class="field wide">
                     <label>Intake notes</label>
-                    <textarea name="notes" rows="3" data-rich placeholder="What the customer reported, what came in the box, visible damage, any loaner sent."></textarea>
+                    <textarea name="notes" rows="3" data-rich placeholder="What the customer reported, what came in the box, visible damage, any loaner sent.">{{fv.notes or ''}}</textarea>
                   </div>
                 </div>
                 <div class="actions">
@@ -961,12 +956,7 @@
                       <div class="section-title">Customer and equipment</div>
                       <div class="field">
                         <label>Customer</label>
-                        <input name="customer" value="{{client_text}}" required list="client-list" autocomplete="off" {% if not can('rma_client_edit') %}readonly title="Shipping, Sales or Admin can change the customer"{% endif %}>
-                        <datalist id="client-list">
-                          {% for c in client_options() %}
-                            <option value="{{c.client_code}} · {{c.name}}">
-                          {% endfor %}
-                        </datalist>
+                        <input name="customer" value="{{client_text}}" required data-combo="customers" data-strict data-current="{{client_text}}" autocomplete="off" {% if not can('rma_client_edit') %}readonly title="Shipping, Sales or Admin can change the customer"{% endif %}>
                         {% if client and can('client_view') %}
                           <div class="hint"><a href="/clients/{{client.id}}">Open customer record →</a></div>
                         {% endif %}
@@ -981,11 +971,11 @@
                       {% endif %}
                       <div class="field">
                         <label>Manufacturer</label>
-                        <input name="manufacturer" value="{{r.manufacturer or ''}}" list="dl-manufacturers" data-strict data-current="{{r.manufacturer or ''}}" autocomplete="off" placeholder="Pick a manufacturer" {% if not can('repair_equipment_edit') %}readonly title="Ask Shipping, Sales or an Admin to correct this"{% endif %}>
+                        <input name="manufacturer" value="{{r.manufacturer or ''}}" data-combo="dl-manufacturers" data-strict data-current="{{r.manufacturer or ''}}" autocomplete="off" placeholder="Pick a manufacturer" {% if not can('repair_equipment_edit') %}readonly title="Ask Shipping, Sales or an Admin to correct this"{% endif %}>
                       </div>
                       <div class="field">
                         <label>Model</label>
-                        <input name="model" value="{{r.model or ''}}" placeholder="e.g. C1-6-D" {% if not can('repair_equipment_edit') %}readonly title="Ask Shipping, Sales or an Admin to correct this"{% endif %}>
+                        <input name="model" value="{{r.model or ''}}" data-combo="dl-products" placeholder="e.g. C1-6-D" {% if not can('repair_equipment_edit') %}readonly title="Ask Shipping, Sales or an Admin to correct this"{% endif %}>
                       </div>
                       <div class="field">
                         <label>Part number</label>
@@ -997,7 +987,7 @@
                       </div>
                       <div class="field">
                         <label>Location</label>
-                        <input name="location" value="{{r.location or ''}}" list="dl-places" data-strict data-current="{{r.location or ''}}" autocomplete="off" placeholder="Pick a location, e.g. Repair">
+                        <input name="location" value="{{r.location or ''}}" data-combo="dl-places" data-strict data-current="{{r.location or ''}}" autocomplete="off" placeholder="Pick a location, e.g. Repair">
                       </div>
                       <div class="field">
                         <label>Assigned tech</label>
@@ -1159,6 +1149,14 @@
                 {% endif %}
               </div>
             </div>
+          {% endif %}
+          {% if mode in ('new', 'detail') %}
+            {# Model suggestions from the Product Database (drop-down in page_tools.html) #}
+            <datalist id="dl-products">
+              {% for p in product_options() %}
+                <option value="{{ p.model }}" data-id="{{ p.id }}" data-name="{{ p.display_name }}" data-mfr="{{ p.manufacturer or '' }}" data-type="{{ p.type }}">
+              {% endfor %}
+            </datalist>
           {% endif %}
           <div class="foot">Customer repairs are tracked separately from sellable stock. Stage rules and who can move each stage are in repairs.py.</div>
         </main>

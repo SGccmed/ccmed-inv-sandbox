@@ -124,6 +124,11 @@ def client_label(row):
     return f"{row['client_code']} · {row['name']}"
 
 
+def squash(text):
+    """Lower case, letters and digits only: 'Just A  Demo-Hospital' -> 'justademohospital'."""
+    return re.sub(r'[^a-z0-9]', '', str(text or '').lower())
+
+
 def resolve_client(c, text):
     """Turn what was typed/picked in a customer box into a customer row (by CL- ID first, then exact name)."""
     text = clean(text)
@@ -281,6 +286,28 @@ def register_client_routes(app, conn):
             finally:
                 c.close()
         return {'client_options': client_options}
+
+    @app.get('/api/customers')
+    def customers_api():
+        # Live list for the customer drop-downs (page_tools.html), so a customer added in another tab shows up
+        # without a refresh. Matches ignore case and spaces; "CL-00012 · Name" (a picked value) finds CL-00012.
+        q = clean(request.args.get('q'))
+        c = conn()
+        try:
+            names = {r['username']: (r['full_name'] or r['username']) for r in c.execute('SELECT username, full_name FROM users')}
+            rows = c.execute("SELECT client_code, name, account_owner, salesforce_id FROM clients "
+                             "WHERE status<>'Inactive' ORDER BY name COLLATE NOCASE").fetchall()
+        finally:
+            c.close()
+        code = re.match(r'^(CL-\d+)', q, re.I)
+        key = squash(q)
+        if code:
+            rows = [r for r in rows if (r['client_code'] or '').upper() == code.group(1).upper()]
+        elif key:
+            rows = [r for r in rows if key in squash(r['name']) or key in squash(r['client_code']) or key in squash(r['salesforce_id'])]
+        out = [{'name': r['name'], 'code': r['client_code'], 'rep': names.get(r['account_owner'], r['account_owner'] or ''),
+                'label': client_label(r)} for r in rows[:50]]
+        return jsonify(results=out, more=len(rows) > 50)
 
     @app.get('/api/serial-check')
     def serial_check():

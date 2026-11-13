@@ -47,12 +47,21 @@ def product_matcher(c):
    elif need and mfr==need and (raw==k or raw.startswith(k+' ')):return pid
   return None
  return match
+NOT_IN_CATALOG='Model not in the Product Database'   # review flag set by receiving (app.py) on unknown models
 def link_units(c):
- """Link stock items that have no product yet. Runs at start-up, after receiving and after catalog changes."""
+ """Link stock items that have no product yet. Runs at start-up, after receiving and after catalog changes.
+ A stock item received with a model that wasn't in the catalog went to Needs review (v1.14); once the product
+ is added and the item links, that flag goes, and if nothing else needs review the item takes the status of its
+ location again (Active, or On loan / Rental)."""
  match=product_matcher(c)
  for u in c.execute('SELECT id,manufacturer,product_raw FROM units WHERE product_id IS NULL').fetchall():
   pid=match(u['manufacturer'],u['product_raw'])
   if pid:c.execute('UPDATE units SET product_id=? WHERE id=?',(pid,u['id']))
+ for u in c.execute('SELECT id,status,physical_location,review FROM units WHERE product_id IS NOT NULL AND review LIKE ?',('%'+NOT_IN_CATALOG+'%',)).fetchall():
+  rest='; '.join(x for x in (u['review'] or '').split('; ') if x.strip() and x.strip()!=NOT_IN_CATALOG)
+  status=u['status']
+  if status=='Needs review' and not rest:status=choices.location_status(u['physical_location'] or '')
+  c.execute('UPDATE units SET review=?,status=? WHERE id=?',(rest,status,u['id']))
 def ensure_product_schema(c):
  """Product tables, the units.product_id link, and linking any stock items not linked yet. Safe on every start."""
  c.executescript(SCHEMA)
@@ -96,12 +105,13 @@ def register_product_routes(app,conn,base):
   # The + New Inventory form suggests catalog models in its Model / Product box.
   def product_options():
    c=conn()
-   try:return c.execute('SELECT model,display_name FROM products WHERE active=1 ORDER BY display_name').fetchall()
+   try:return [dict(r,type=CATEGORIES.get(r['category'],'')) for r in c.execute('SELECT id,model,display_name,manufacturer,category FROM products WHERE active=1 ORDER BY display_name COLLATE NOCASE')]
    finally:c.close()
   return {'product_options':product_options}
  GROUPS=[('available','Available'),('out','On loan / rental'),('sold','Sold')]
  GROUP_STATUS={'available':('Active',),'out':('On loan','Rental'),'sold':('Sold archive',)}
  def page(**ctx):
+  ctx.setdefault('rb',{})
   return render_template_string(PAGE,categories=CATEGORIES,**ctx)
  def user_names(c):
   return {r['username']:(r['full_name'] or r['username']) for r in c.execute('SELECT username,full_name FROM users')}
@@ -144,6 +154,7 @@ def register_product_routes(app,conn,base):
  def detail(pid):
   c=conn();setup(c);ctx=product_context(c,pid)
   if not ctx:c.close();return 'Product not found',404
+  ctx['rb']=session.pop('request_form',None) or {}     # a request sent back with a problem keeps its values
   if request.args.get('tab')=='details':
    c.close();return page(mode='details',**ctx)
   # Stock: units of this product by group (technicians only see what's available), sub-filtered by location or serial.
@@ -178,11 +189,15 @@ def register_product_routes(app,conn,base):
   if not c.execute('SELECT 1 FROM products WHERE id=?',(pid,)).fetchone():c.close();return 'Product not found',404
   try:qty=int(f.get('quantity') or 1)
   except ValueError:qty=0
-  if not 1<=qty<=999:c.close();flash('Enter a quantity from 1 to 999.');return redirect(f'/products/{pid}#request')
+  def send_back(message):
+   # v1.14: the request form opens again with what was typed (see detail() and products.html).
+   c.close();flash(message);session['request_form']={k:clean(f.get(k))[:500] for k in ('quantity','customer','note')}
+   return redirect(f'/products/{pid}#request')
+  if not 1<=qty<=999:return send_back('Enter a quantity from 1 to 999.')
   client=None
   if clean(f.get('customer')):
    client=resolve_client(c,f.get('customer'))
-   if client is None:c.close();flash('Pick the customer from the list, or leave it blank.');return redirect(f'/products/{pid}#request')
+   if client is None:return send_back('Pick the customer from the list, or leave it blank.')
   c.execute("INSERT INTO stock_requests(product_id,quantity,client_id,customer_name,note,requested_by,created_at,status) VALUES (?,?,?,?,?,?,?,'Open')",
             (pid,qty,client['id'] if client else None,client['name'] if client else None,clean(f.get('note'))[:500],g.user['username'],now_iso()))
   c.commit();c.close()

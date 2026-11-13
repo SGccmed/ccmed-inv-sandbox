@@ -423,7 +423,7 @@
         </div>
 
         {% if mode != 'edit' %}
-          <div class="panel request-form" id="request">
+          <div class="panel request-form{% if rb %} open{% endif %}" id="request">
             <h2>Request this item</h2>
             <p class="muted" style="margin-top:0">The request goes on the Product Database page with this product's details and your name.
               An Admin, you, or the customer's sales rep ticks it off when it's handled.</p>
@@ -431,22 +431,17 @@
               <div class="row">
                 <div>
                   <label>Quantity</label>
-                  <input name="quantity" type="number" min="1" max="999" value="1" required style="width:100px">
+                  <input name="quantity" type="number" min="1" max="999" value="{{ rb.quantity or 1 }}" required style="width:100px">
                 </div>
                 {% if can('client_view') %}
                   <div style="min-width:260px">
                     <label>For customer (optional)</label>
-                    <input name="customer" list="client-list" autocomplete="off" placeholder="Start typing a customer…" style="width:100%">
-                    <datalist id="client-list">
-                      {% for c in client_options() %}
-                        <option value="{{ c.client_code }} · {{ c.name }}">
-                      {% endfor %}
-                    </datalist>
+                    <input name="customer" value="{{ rb.customer or '' }}" data-combo="customers" data-strict autocomplete="off" placeholder="Start typing a customer…" style="width:100%">
                   </div>
                 {% endif %}
                 <div style="flex:1;min-width:260px">
                   <label>Note (optional)</label>
-                  <input name="note" maxlength="500" placeholder="e.g. needed by Friday, any condition is fine" style="width:100%">
+                  <input name="note" maxlength="500" value="{{ rb.note or '' }}" placeholder="e.g. needed by Friday, any condition is fine" style="width:100%">
                 </div>
                 <div><button>Send request</button></div>
               </div>
@@ -583,7 +578,7 @@
                 </div>
                 <div>
                   <label>Manufacturer</label>
-                  <input name="manufacturer" value="{{ p.manufacturer or '' }}" list="dl-manufacturers" data-strict data-current="{{ p.manufacturer or '' }}" autocomplete="off">
+                  <input name="manufacturer" value="{{ p.manufacturer or '' }}" data-combo="dl-manufacturers" data-strict data-current="{{ p.manufacturer or '' }}" autocomplete="off">
                 </div>
                 <div>
                   <label>Model</label>

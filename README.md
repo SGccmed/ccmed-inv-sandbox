@@ -39,7 +39,7 @@ Every page needs a staff login. Serial numbers are **not** unique keys: a matchi
 | `costs.py` | Cost adjustments (Admins): corrects a cost or quoted price with a required reason, keeps the history |
 | `cores.py` | Core repairs: ticket updates, statuses, costs, converting to stock |
 | `formatting.py` | Pacific-time dates ("Oct 30, 2026"), safe display of rich text notes, work hours, sortable column headers |
-| `page_tools.html` | Added to every page: rich text editor, red warning on negative costs, Start/End time totals, the ☆ Favorite button |
+| `page_tools.html` | Added to every page: rich text editor, red warning on negative costs, Start/End time totals, the ☆ Favorite button, and the drop-down lists (customers, locations, manufacturers, models) |
 | `trix.js`, `trix.css` | Trix rich text editor (open source, MIT licence, by 37signals), served by the app itself |
 | `repairs.py` | Customer repair tickets: the stages, who can move each one, queues, work log |
 | `search.py` | Search across customers, tickets, stock and cores |
@@ -119,9 +119,13 @@ A core is worked like a ticket. Technicians post **ticket updates**: the day wor
 
 The core list can be sorted by any column and shows hours logged. Technicians can enter costs but never see amounts or totals; the cost summary is for Sales, Admin and SuperAdmin. Cores in the old QC status become In Repair automatically.
 
-## Locations and manufacturers
+## Drop-down lists, locations and manufacturers
 
-Every location and manufacturer field (receiving, shelf transfers, repair tickets, product requests and edits) is a type-to-search drop-down. The lists live in `choices.py`.
+Every customer, location, manufacturer and model field is a type-to-search drop-down drawn by the app (since v1.14), so it looks and works the same in every browser and on phones. It opens when you click or type, ignores capitals and spaces, shows 8 rows and then scrolls. Arrow keys move, Enter picks (it doesn't save the form), Esc closes. The browser's own autofill is switched off on these fields. The location and manufacturer lists live in `choices.py`.
+
+- **Customers** are looked up live, so a customer added in another tab shows up without refreshing. Each row shows the name, the sales rep and the CL- number. Leaving the box with exactly one match fills it in (it flashes green). With no match the box turns red ("No customer by that name") and the save button greys out; with several it asks you to pick one. People who can add customers see **+ Add new customer** at the bottom of the list (opens in a new tab). The server checks the customer again when you save.
+- **Model / Product** suggests products from the Product Database (name, manufacturer, type), narrowed to the manufacturer you picked. Picking one fills in a blank manufacturer and ties the stock item straight to that product. You can still type a model that isn't in the catalog: on + New Inventory a yellow note warns it won't appear on a product page, and a stock (CC) item saved that way goes to **Needs review** (Loan/Rental items keep their status but get the same review note). Once the product is added to the Product Database, the item links to it and leaves Needs review by itself.
+- **Nothing typed is lost:** if + New Inventory, a new repair ticket or Request this item finds a problem when you save, the form comes back with everything you entered and a message saying what to fix (on + New Inventory the item is outlined in red).
 
 - **Locations** must come from the list: A1–A4, B1–B4, C1–C4, T1, UG, 2D, Loan, Rental, Repair, ACER, LEN, INT, PBO. Anything else turns the field red and greys out the save button, and the server refuses it too. Typing in lower case is fine (`a1` is saved as `A1`).
 - **Loan and Rental** also set a stock item's status (On loan / Rental); moving it to any other location makes it Active again. They're only offered for stock (CC) items, and technicians can't move items to or from them. Cores and repair tickets use the other locations.

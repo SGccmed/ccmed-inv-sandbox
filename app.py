@@ -129,33 +129,52 @@ def entry_row(f):
 def inventory_new():
  if request.method=='GET':return render_template_string(ENTRY_TEMPLATE,today=date.today().isoformat())
  # Multiple-row entry is atomic: invalid rows do not result in partial receiving.
+ # v1.14: a problem sends the whole form back with everything typed (and the row to fix outlined), not an error page.
  f=request.form;fields=('type','manufacturer','product','serial','location','cost','condition','notes','customer','rma','technician','received_date')
  length=max((len(f.getlist(k+'[]')) for k in fields),default=0)
- rows=[];c=conn();ensure_entry_schema(c)
+ pids=f.getlist('product_id[]');posted=[]
  for i in range(length):
   row={k:(f.getlist(k+'[]')[i].strip() if i<len(f.getlist(k+'[]')) else '') for k in fields}
   if not any(row.values()):continue
-  n=len(rows)+1
-  if not row['type'] or row['type'] not in ('CC','CR','RP'):c.close();return f'Row {n}: select CC, CR or RP',400
-  if not row['product']:c.close();return f'Row {n}: model / product is required',400
-  if row['type']=='RP' and not row['customer']:c.close();return f'Row {n}: a customer is required for RP items (the RMA number is created automatically if left blank)',400
+  row['product_id']=pids[i].strip() if i<len(pids) else ''
+  posted.append(row)
+ c=conn();ensure_entry_schema(c)
+ def back(n,message):
+  c.close()
+  return render_template_string(ENTRY_TEMPLATE,today=date.today().isoformat(),rows_back=[dict(r) for r in posted],error_row=n,
+   error=(f'Item {n}: ' if n else '')+message),400
+ rows=[];match=product_matcher(c)
+ for n,row in enumerate(posted,1):
+  row=dict(row)
+  if not row['type'] or row['type'] not in ('CC','CR','RP'):return back(n,'select CC, CR or RP.')
+  if not row['product']:return back(n,'model / product is required.')
+  if row['type']=='RP' and not row['customer']:return back(n,'a customer is required for RP items (the RMA number is created automatically if left blank).')
   row['client']=None
   if row['type']=='RP':
    row['client']=resolve_client(c,row['customer'])
-   if row['client'] is None:c.close();return f'Row {n}: customer "{row["customer"]}" is not in the customer list. Pick one from the list or add it under Customers first.',400
+   if row['client'] is None:return back(n,f'no customer called "{row["customer"]}". Pick one from the list or add it under Customers first.')
   row['manufacturer'],problem=choices.check_manufacturer(row['manufacturer'])
-  if problem:c.close();return f'Row {n}: '+problem,400
+  if problem:return back(n,problem)
   if row['location']:
    loc=choices.location(row['location'])
-   if not loc:c.close();return f'Row {n}: "{row["location"]}" is not one of the locations. Pick one from the list.',400
-   if row['type']!='CC' and loc not in choices.PLACES:c.close();return f'Row {n}: Loan and Rental are only for stock (CC) items.',400
+   if not loc:return back(n,f'"{row["location"]}" is not one of the locations. Pick one from the list.')
+   if row['type']!='CC' and loc not in choices.PLACES:return back(n,'Loan and Rental are only for stock (CC) items.')
    row['location']=loc
   try:
    if row['received_date']:date.fromisoformat(row['received_date'])
    row['cost_value']=amount(row['cost'],'Purchase cost')
-  except ValueError as e:c.close();return f'Row {n}: '+str(e),400
+  except ValueError as e:return back(n,str(e)+'.')
+  # Catalog product: the one picked from the drop-down (if it fits the manufacturer), else matched by name.
+  row['pid']=None
+  if row['product_id'].isdigit():
+   p=c.execute('SELECT id,manufacturer FROM products WHERE id=? AND active=1',(int(row['product_id']),)).fetchone()
+   p_mfr=p and (choices.manufacturer(p['manufacturer']) or p['manufacturer'])
+   if p and (not row['manufacturer'] or row['manufacturer']==p_mfr):
+    row['pid']=p['id']
+    if not row['manufacturer'] and choices.manufacturer(p['manufacturer']):row['manufacturer']=p_mfr
+  if row['pid'] is None:row['pid']=match(row['manufacturer'],row['product'])
   rows.append(row)
- if not rows:c.close();return 'Enter at least one item',400
+ if not rows:return back(None,'Enter at least one item.')
  # Serial numbers are not unique keys (different manufacturers can repeat them), so matches only raise an alert.
  alerts=[];seen={}
  for i,row in enumerate(rows,1):
@@ -172,9 +191,15 @@ def inventory_new():
    typ=row['type'];code=new_inventory_code(c,typ);codes.append(code)
    received=row['received_date'] or date.today().isoformat()
    if typ=='CC':
-    c.execute("""INSERT INTO units(manufacturer,product_raw,product_key,serial,cost,dom,notes,location_raw,physical_location,status,condition,review,inventory_code,supplier,received_date,entry_batch_id)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-     (row['manufacturer'],row['product'],norm(row['product']),row['serial'],row['cost_value'],'',row['notes'],row['location'],row['location'],choices.location_status(row['location']),row['condition'] or 'Unspecified','',code,None,received,batch))
+    # A model that isn't in the Product Database goes to Needs review (Loan/Rental keep their status but
+    # get the same flag). link_units() clears it once the product is added to the catalog.
+    status=choices.location_status(row['location']);review=''
+    if not row['pid']:
+     review=NOT_IN_CATALOG
+     if status=='Active':status='Needs review'
+    c.execute("""INSERT INTO units(manufacturer,product_raw,product_key,serial,cost,dom,notes,location_raw,physical_location,status,condition,review,inventory_code,supplier,received_date,entry_batch_id,product_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+     (row['manufacturer'],row['product'],norm(row['product']),row['serial'],row['cost_value'],'',row['notes'],row['location'],row['location'],status,row['condition'] or 'Unspecified',review,code,None,received,batch,row['pid']))
    elif typ=='CR':
     c.execute("""INSERT INTO core_items(inventory_code,manufacturer,product_raw,serial,location,supplier,original_cost,notes,created_at)
      VALUES (?,?,?,?,?,?,?,?,?)""",(code,row['manufacturer'],row['product'],row['serial'],row['location'],None,row['cost_value'],row['notes'],now_iso()))
@@ -186,9 +211,9 @@ def inventory_new():
   link_units(c)      # tie new stock items to their catalog product (see product_database.py)
   c.commit()
  except (sqlite3.Error,ValueError) as e:
-  c.rollback();c.close()
-  if 'rma' in str(e).lower():return 'Receiving not saved: an RMA number on this form is already used on another ticket.',400
-  return 'Receiving not saved: '+str(e),400
+  c.rollback()
+  if 'rma' in str(e).lower():return back(None,'An RMA number on this form is already used on another ticket.')
+  return back(None,'Receiving not saved: '+str(e))
  c.close();flash('Saved '+str(len(codes))+' items: '+', '.join(codes))
  for a in alerts:flash('⚠ Serial number alert: '+a)
  return redirect(url_for('inventory_new'))
@@ -305,7 +330,7 @@ def restore_upload():
  if file_has_users:session.clear()
  return send_file(safety,as_attachment=True,download_name=safety.name)
 
-from product_database import register_product_routes, ensure_product_schema, link_units
+from product_database import register_product_routes, ensure_product_schema, link_units, product_matcher, NOT_IN_CATALOG
 register_auth(app,conn)
 register_product_routes(app,conn,BASE)
 register_client_routes(app,conn)
