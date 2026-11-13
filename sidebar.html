@@ -1,6 +1,16 @@
-<!-- The one sidebar used on every page (v1.12). auth.add_user_block() puts it where a page has the sidebar marker comment.
-     Same items, same order everywhere; the current page is highlighted; links a role can't use are hidden.
-     Counts come from sidebar_counts() in app.py. Pending is yellow and Needs Review red when they have items. -->
+<!-- The one sidebar used on every page (v1.12; icon groups v1.16). auth.add_user_block() puts it where a page has the
+     sidebar marker comment. Same items, same order everywhere; the current page is highlighted; links a role can't use
+     are hidden. Counts come from sidebar_counts() in app.py. Pending is yellow and Needs Review red when they have items.
+
+     Three layouts (v1.16):
+       Wide screens, open       the full sidebar: each group has an icon and title, with its links under it.
+       Wide screens, collapsed  a thin rail of group icons (the « button at the top). Clicking or hovering an icon opens
+                                a small panel beside it with that group's links. Remembered per browser (localStorage).
+       Narrow screens (< 1000px) a top bar of the same icons; tapping one opens its links in a row under the bar.
+     Icons are drawn here as small inline SVGs (house, box with tape, wrench, file cabinet, truck, gear, person). -->
+<script>
+  try { if (localStorage.getItem('ccm-side') === 'collapsed') document.documentElement.classList.add('ccm-collapsed'); } catch (e) {}
+</script>
 <style>
   aside.ccm-side {
     position: fixed;
@@ -12,16 +22,31 @@
     overflow-y: auto;
     background: #112a42;
     color: #e4edf5;
-    padding: 22px 14px 18px;
-    min-height: 0;
+    padding: 18px 14px 18px;
     display: flex;
     flex-direction: column;
     gap: 2px;
-    z-index: 20;
+    z-index: 40;
     font: 14px/1.5 system-ui, -apple-system, Segoe UI, Arial, sans-serif
   }
   body {
     padding-left: 232px
+  }
+  aside.ccm-side svg {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round
+  }
+  .ccm-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 6px
   }
   aside.ccm-side .ccm-brand {
     display: block;
@@ -30,7 +55,8 @@
     font-weight: 750;
     padding: 0 12px 12px;
     text-decoration: none;
-    background: none
+    background: none;
+    white-space: nowrap
   }
   aside.ccm-side .ccm-brand small {
     display: block;
@@ -40,13 +66,81 @@
     letter-spacing: 1px;
     text-transform: uppercase
   }
-  aside.ccm-side .ccm-group {
+  .ccm-brand .ccm-short {
+    display: none
+  }
+  .ccm-collapse {
+    background: none;
+    border: 0;
     color: #91a9be;
+    padding: 4px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin: 2px 0 0
+  }
+  .ccm-collapse:hover {
+    background: #203d56;
+    color: #ffffff
+  }
+  html.ccm-collapsed .ccm-collapse svg {
+    transform: rotate(180deg)
+  }
+  /* A group: a header button (icon + title) and its links */
+  .ccm-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 0 auto
+  }
+  .ccm-sec {
+    position: relative
+  }
+  .ccm-sec-btn,
+  aside.ccm-side a.ccm-home {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    background: none;
+    border: 0;
+    font: inherit;
+    text-align: left;
+    color: #91a9be;
+    padding: 12px 13px 4px;
     text-transform: uppercase;
     letter-spacing: 1px;
     font-size: 10px;
     font-weight: 600;
-    padding: 14px 13px 4px
+    cursor: default;
+    border-radius: 8px;
+    text-decoration: none
+  }
+  .ccm-sec-btn svg {
+    width: 16px;
+    height: 16px
+  }
+  aside.ccm-side a.ccm-home {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 14px;
+    font-weight: 400;
+    color: #dce9f4;
+    padding: 9px 13px;
+    cursor: pointer
+  }
+  aside.ccm-side a.ccm-home:hover {
+    background: #203d56
+  }
+  aside.ccm-side a.ccm-home.on {
+    background: #2b5f88;
+    color: #ffffff;
+    font-weight: 650
+  }
+  .ccm-sec-btn .ccm-dot {
+    display: none
+  }
+  .ccm-sub-title {
+    display: none
   }
   aside.ccm-side a.ccm-link {
     display: flex;
@@ -54,7 +148,7 @@
     align-items: center;
     gap: 8px;
     color: #dce9f4;
-    padding: 9px 13px;
+    padding: 8px 13px;
     border-radius: 8px;
     text-decoration: none;
     background: none;
@@ -71,7 +165,7 @@
   aside.ccm-side .ccm-count {
     font-size: 11px;
     color: #c3d2df;
-    background: #ffffff20;
+    background: rgba(255, 255, 255, .13);
     border-radius: 20px;
     padding: 1px 8px;
     font-weight: 600
@@ -84,80 +178,382 @@
     background: #d64541;
     color: #ffffff
   }
-  /* Phones and narrow windows: the sidebar sits on top of the page and the links wrap. */
-  @media (max-width: 900px) {
+  .ccm-account {
+    margin-top: auto
+  }
+  .ccm-account > .ccm-sec-btn,
+  .ccm-search > .ccm-sec-btn {
+    display: none
+  }
+
+  /* ---- Wide screens, collapsed: a rail of icons; groups open as a small panel beside it ---- */
+  @media (min-width: 1000px) {
+    html.ccm-collapsed aside.ccm-side {
+      width: 64px;
+      padding: 14px 8px;
+      overflow: visible
+    }
+    html.ccm-collapsed body {
+      padding-left: 64px
+    }
+    html.ccm-collapsed .ccm-top {
+      flex-direction: column;
+      align-items: center
+    }
+    html.ccm-collapsed aside.ccm-side .ccm-brand {
+      padding: 0 0 6px;
+      font-size: 17px
+    }
+    html.ccm-collapsed .ccm-brand .ccm-full,
+    html.ccm-collapsed .ccm-brand small {
+      display: none
+    }
+    html.ccm-collapsed .ccm-brand .ccm-short {
+      display: inline
+    }
+    html.ccm-collapsed .ccm-label {
+      display: none
+    }
+    html.ccm-collapsed .ccm-sec-btn,
+    html.ccm-collapsed aside.ccm-side a.ccm-home {
+      justify-content: center;
+      padding: 10px 0;
+      color: #dce9f4;
+      cursor: pointer;
+      position: relative
+    }
+    html.ccm-collapsed .ccm-account > .ccm-sec-btn,
+    html.ccm-collapsed .ccm-search > .ccm-sec-btn {
+      display: flex
+    }
+    html.ccm-collapsed .ccm-sec-btn svg {
+      width: 22px;
+      height: 22px
+    }
+    html.ccm-collapsed .ccm-sec-btn:hover,
+    html.ccm-collapsed .ccm-sec.open > .ccm-sec-btn {
+      background: #203d56
+    }
+    html.ccm-collapsed .ccm-sec.here > .ccm-sec-btn {
+      background: #2b5f88;
+      color: #ffffff
+    }
+    html.ccm-collapsed .ccm-sec-btn .ccm-dot {
+      display: block;
+      position: absolute;
+      top: 6px;
+      right: 9px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #d64541;
+      border: 2px solid #112a42
+    }
+    html.ccm-collapsed .ccm-sec-btn .ccm-dot.yellow {
+      background: #f5c451
+    }
+    html.ccm-collapsed .ccm-sub {
+      display: none;
+      position: fixed;
+      left: 66px;
+      min-width: 230px;
+      max-width: 300px;
+      max-height: calc(100vh - 16px);
+      overflow-y: auto;
+      background: #112a42;
+      border: 1px solid #203d56;
+      border-radius: 10px;
+      padding: 8px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, .35);
+      z-index: 50
+    }
+    html.ccm-collapsed .ccm-sec.open > .ccm-sub {
+      display: block
+    }
+    html.ccm-collapsed .ccm-sub-title {
+      display: block;
+      color: #91a9be;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 4px 13px 6px
+    }
+  }
+
+  /* ---- Narrow screens: a top bar of icons; a group's links open in a row under the bar ---- */
+  @media (max-width: 999px) {
+    /* Fixed to the top, out of the page's own layout, so it never pushes the page aside or fills the screen. */
     aside.ccm-side {
-      position: static;
-      width: auto;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
       bottom: auto;
+      width: auto;
+      height: 52px;
       overflow: visible;
-      padding: 12px
+      flex-direction: row;
+      align-items: center;
+      gap: 2px;
+      padding: 4px 6px
     }
     body {
-      padding-left: 0
+      padding-left: 0;
+      padding-top: 52px
     }
-    aside.ccm-side .ccm-nav {
+    .ccm-top {
+      align-items: center
+    }
+    .ccm-collapse {
+      display: none
+    }
+    aside.ccm-side .ccm-brand {
+      padding: 0 8px 0 4px;
+      font-size: 17px
+    }
+    aside.ccm-side .ccm-brand .ccm-full,
+    aside.ccm-side .ccm-brand small {
+      display: none
+    }
+    aside.ccm-side .ccm-brand .ccm-short {
+      display: inline
+    }
+    .ccm-nav {
+      display: flex;
+      flex-direction: row;
+      flex: 1;
+      align-items: center;
+      justify-content: space-around;
+      gap: 2px;
+      min-width: 0
+    }
+    .ccm-label {
+      display: none
+    }
+    .ccm-sec {
+      position: static
+    }
+    .ccm-account {
+      margin-top: 0
+    }
+    .ccm-sec-btn,
+    aside.ccm-side a.ccm-home,
+    .ccm-account > .ccm-sec-btn,
+    .ccm-search > .ccm-sec-btn {
+      display: flex;
+      justify-content: center;
+      padding: 9px 8px;
+      color: #dce9f4;
+      cursor: pointer;
+      position: relative
+    }
+    .ccm-sec-btn svg {
+      width: 22px;
+      height: 22px
+    }
+    .ccm-sec.open > .ccm-sec-btn {
+      background: #203d56
+    }
+    aside.ccm-side a.ccm-home,
+    .ccm-sec-btn {
+      width: auto
+    }
+    .favbtn {
+      top: 62px !important
+    }
+    .ccm-sec.here > .ccm-sec-btn {
+      background: #2b5f88;
+      color: #ffffff
+    }
+    .ccm-sec-btn .ccm-dot {
+      display: block;
+      position: absolute;
+      top: 5px;
+      right: 6px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #d64541;
+      border: 2px solid #112a42
+    }
+    .ccm-sec-btn .ccm-dot.yellow {
+      background: #f5c451
+    }
+    .ccm-sub {
+      display: none;
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 100%;
+      background: #112a42;
+      border-top: 1px solid #203d56;
+      padding: 8px;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, .3);
+      max-height: 70vh;
+      overflow-y: auto
+    }
+    .ccm-sec.open > .ccm-sub {
       display: flex;
       flex-wrap: wrap;
       gap: 4px
     }
-    aside.ccm-side .ccm-group {
-      display: none
+    .ccm-search.open > .ccm-sub,
+    .ccm-account.open > .ccm-sub {
+      display: block
     }
-    aside.ccm-side a.ccm-link {
-      padding: 7px 10px;
+    aside.ccm-side .ccm-sub a.ccm-link {
+      padding: 8px 12px;
       white-space: nowrap
     }
   }
 </style>
-<aside class="ccm-side">
-  <a href="/" class="ccm-brand">CC Medical<small>Inventory Workspace</small></a>
-  <!--search-->
+<aside class="ccm-side" id="ccm-side">
   {# Names start with sb_ so they never clash with a page's own variables (a page's `p` is its product). #}
   {% set sb_path = request.path %}
   {% set sb_view = request.args.get('view', 'Active') %}
   {% set sb_n = sidebar_counts() %}
   {% set sb_inv_views = ('Active', 'Sold archive', 'All') %}
+  {% set sb_inv_here = sb_path.startswith('/inventory') and sb_path != '/inventory/new' or sb_path.startswith('/unit/') %}
+  {% set sb_rep_here = sb_path.startswith('/repairs') or sb_path.startswith('/cores') %}
+  {% set sb_ref_here = sb_path.startswith('/clients') or (sb_path.startswith('/products') and not sb_path.startswith('/products/admin')) %}
+  {% set sb_ship_here = sb_path == '/inventory/new' or sb_path.startswith('/shipping') %}
+  {% set sb_adm_here = sb_path.startswith('/users') or sb_path.startswith('/products/admin') %}
+  <div class="ccm-top">
+    <a href="/" class="ccm-brand"><span class="ccm-full">CC Medical</span><span class="ccm-short">CC</span><small>Inventory Workspace</small></a>
+    <button type="button" class="ccm-collapse" aria-label="Collapse or expand the menu" title="Collapse or expand the menu"
+      onclick="ccmToggleSide()"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/><path d="M20 6l-6 6 6 6"/></svg></button>
+  </div>
+  <div class="ccm-sec ccm-search">
+    <button type="button" class="ccm-sec-btn" aria-label="Search" title="Search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></svg><span class="ccm-label">Search</span></button>
+    <div class="ccm-sub"><!--search--></div>
+  </div>
   <nav class="ccm-nav">
-    <a class="ccm-link {% if sb_path == '/' %}on{% endif %}" href="/">Home</a>
-    {% if can('receive') %}
-      <a class="ccm-link {% if sb_path == '/inventory/new' %}on{% endif %}" href="/inventory/new">+ New Inventory</a>
-    {% endif %}
+    <a class="ccm-home {% if sb_path == '/' %}on{% endif %}" href="/" title="Home"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v11h5v-6h4v6h5V9"/></svg><span class="ccm-label">Home</span></a>
 
-    <div class="ccm-group">Inventory</div>
-    <a class="ccm-link {% if (sb_path == '/inventory' and sb_view in sb_inv_views) or sb_path.startswith('/unit/') %}on{% endif %}" href="/inventory">Inventory</a>
-    {% if can('restricted_stock') %}
-      <a class="ccm-link {% if sb_path == '/inventory' and sb_view == 'On loan' %}on{% endif %}" href="/inventory?view=On%20loan">
-        <span>Loaners</span><span class="ccm-count">{{ sb_n.get('On loan', 0) }}</span></a>
-      <a class="ccm-link {% if sb_path == '/inventory' and sb_view == 'Rental' %}on{% endif %}" href="/inventory?view=Rental">
-        <span>Rental</span><span class="ccm-count">{{ sb_n.get('Rental', 0) }}</span></a>
-    {% endif %}
-    <a class="ccm-link {% if sb_path == '/inventory' and sb_view == 'Pending review' %}on{% endif %}" href="/inventory?view=Pending%20review">
-      <span>Pending</span><span class="ccm-count {% if sb_n.get('Pending review') %}yellow{% endif %}">{{ sb_n.get('Pending review', 0) }}</span></a>
-    <a class="ccm-link {% if sb_path == '/inventory' and sb_view == 'Needs review' %}on{% endif %}" href="/inventory?view=Needs%20review">
-      <span>Needs Review</span><span class="ccm-count {% if sb_n.get('Needs review') %}red{% endif %}">{{ sb_n.get('Needs review', 0) }}</span></a>
+    <div class="ccm-sec {% if sb_inv_here %}here{% endif %}" data-sec="inventory">
+      <button type="button" class="ccm-sec-btn" title="Inventory"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="1.5"/><path d="M3 8l2.5-4h13L21 8"/><path d="M10 8V4.2M14 8V4.2M10 8v4h4V8"/></svg><span class="ccm-label">Inventory</span>{% if sb_n.get('Needs review') %}<span class="ccm-dot"></span>{% elif sb_n.get('Pending review') %}<span class="ccm-dot yellow"></span>{% endif %}</button>
+      <div class="ccm-sub">
+        <div class="ccm-sub-title">Inventory</div>
+        <a class="ccm-link {% if (sb_path == '/inventory' and sb_view in sb_inv_views) or sb_path.startswith('/unit/') %}on{% endif %}" href="/inventory"><span>Inventory</span></a>
+        {% if can('restricted_stock') %}
+          <a class="ccm-link {% if sb_path == '/inventory' and sb_view == 'On loan' %}on{% endif %}" href="/inventory?view=On%20loan"><span>Loaners</span><span class="ccm-count">{{ sb_n.get('On loan', 0) }}</span></a>
+          <a class="ccm-link {% if sb_path == '/inventory' and sb_view == 'Rental' %}on{% endif %}" href="/inventory?view=Rental"><span>Rental</span><span class="ccm-count">{{ sb_n.get('Rental', 0) }}</span></a>
+        {% endif %}
+        <a class="ccm-link {% if sb_path == '/inventory' and sb_view == 'Pending review' %}on{% endif %}" href="/inventory?view=Pending%20review"><span>Pending</span><span class="ccm-count {% if sb_n.get('Pending review') %}yellow{% endif %}">{{ sb_n.get('Pending review', 0) }}</span></a>
+        <a class="ccm-link {% if sb_path == '/inventory' and sb_view == 'Needs review' %}on{% endif %}" href="/inventory?view=Needs%20review"><span>Needs Review</span><span class="ccm-count {% if sb_n.get('Needs review') %}red{% endif %}">{{ sb_n.get('Needs review', 0) }}</span></a>
+      </div>
+    </div>
 
-    <div class="ccm-group">Repairs</div>
-    <a class="ccm-link {% if sb_path.startswith('/repairs') %}on{% endif %}" href="/repairs">
-      <span>Customer Repairs (RP)</span><span class="ccm-count" title="Open tickets">{{ sb_n.repairs }}</span></a>
-    <a class="ccm-link {% if sb_path.startswith('/cores') %}on{% endif %}" href="/cores">
-      <span>Core Repairs (CR)</span><span class="ccm-count" title="Open cores">{{ sb_n.cores }}</span></a>
+    <div class="ccm-sec {% if sb_rep_here %}here{% endif %}" data-sec="repairs">
+      <button type="button" class="ccm-sec-btn" title="Repairs"><svg viewBox="0 0 24 24"><path d="M14.5 5.5a4.5 4.5 0 0 0 5.6 5.6L11 20.2a2.3 2.3 0 0 1-3.2-3.2L16.9 7.9"/><path d="M14.5 5.5 17 3l1 3 3 1-2.4 2.5"/></svg><span class="ccm-label">Repairs</span></button>
+      <div class="ccm-sub">
+        <div class="ccm-sub-title">Repairs</div>
+        <a class="ccm-link {% if sb_path.startswith('/repairs') %}on{% endif %}" href="/repairs"><span>Customer Repairs (RP)</span><span class="ccm-count" title="Open tickets">{{ sb_n.repairs }}</span></a>
+        <a class="ccm-link {% if sb_path.startswith('/cores') %}on{% endif %}" href="/cores"><span>Core Repairs (CR)</span><span class="ccm-count" title="Open cores">{{ sb_n.cores }}</span></a>
+      </div>
+    </div>
 
-    <div class="ccm-group">Reference</div>
-    {% if can('client_view') %}
-      <a class="ccm-link {% if sb_path.startswith('/clients') %}on{% endif %}" href="/clients">Customers</a>
+    <div class="ccm-sec {% if sb_ref_here %}here{% endif %}" data-sec="reference">
+      <button type="button" class="ccm-sec-btn" title="Reference"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M5 12h14M10 7.5h4M10 16.5h4"/></svg><span class="ccm-label">Reference</span></button>
+      <div class="ccm-sub">
+        <div class="ccm-sub-title">Reference</div>
+        {% if can('client_view') %}
+          <a class="ccm-link {% if sb_path.startswith('/clients') %}on{% endif %}" href="/clients"><span>Customers</span></a>
+        {% endif %}
+        <a class="ccm-link {% if sb_path.startswith('/products') and not sb_path.startswith('/products/admin') %}on{% endif %}" href="/products"><span>Product Database</span></a>
+      </div>
+    </div>
+
+    {% if can('receive') or can('shipping_view') %}
+      <div class="ccm-sec {% if sb_ship_here %}here{% endif %}" data-sec="shipping">
+        <button type="button" class="ccm-sec-btn" title="Shipping"><svg viewBox="0 0 24 24"><path d="M2 6h11v10H2z"/><path d="M13 9h4.5l3.5 3.5V16h-8"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg><span class="ccm-label">Shipping</span></button>
+        <div class="ccm-sub">
+          <div class="ccm-sub-title">Shipping</div>
+          {% if can('receive') %}
+            <a class="ccm-link {% if sb_path == '/inventory/new' %}on{% endif %}" href="/inventory/new"><span>+ New Inventory</span></a>
+          {% endif %}
+          {% if can('shipping_view') %}
+            <a class="ccm-link {% if sb_path.startswith('/shipping') %}on{% endif %}" href="/shipping"><span>Shipping queue</span>{% if sb_n.ship %}<span class="ccm-count" title="Repairs ready to ship">{{ sb_n.ship }}</span>{% endif %}</a>
+          {% endif %}
+        </div>
+      </div>
     {% endif %}
-    <a class="ccm-link {% if sb_path.startswith('/products') and not sb_path.startswith('/products/admin') %}on{% endif %}" href="/products">Product Database</a>
 
     {% if can('users_manage') or can('catalog_admin') %}
-      <div class="ccm-group">Admin</div>
-      {% if can('users_manage') %}
-        <a class="ccm-link {% if sb_path.startswith('/users') %}on{% endif %}" href="/users">Users</a>
-      {% endif %}
-      {% if can('catalog_admin') %}
-        <a class="ccm-link {% if sb_path.startswith('/products/admin') %}on{% endif %}" href="/products/admin">Admin Mode</a>
-      {% endif %}
+      <div class="ccm-sec {% if sb_adm_here %}here{% endif %}" data-sec="admin">
+        <button type="button" class="ccm-sec-btn" title="Admin"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/><circle cx="12" cy="12" r="6.6"/></svg><span class="ccm-label">Admin</span></button>
+        <div class="ccm-sub">
+          <div class="ccm-sub-title">Admin</div>
+          {% if can('users_manage') %}
+            <a class="ccm-link {% if sb_path.startswith('/users') %}on{% endif %}" href="/users"><span>Users</span></a>
+          {% endif %}
+          {% if can('catalog_admin') %}
+            <a class="ccm-link {% if sb_path.startswith('/products/admin') %}on{% endif %}" href="/products/admin"><span>Admin Mode</span></a>
+          {% endif %}
+        </div>
+      </div>
     {% endif %}
+
+    <div class="ccm-sec ccm-account" data-sec="account">
+      <button type="button" class="ccm-sec-btn" title="Your account"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.2-4 4.3-6 8-6s6.8 2 8 6"/></svg><span class="ccm-label">Account</span></button>
+      <div class="ccm-sub"><!--user--></div>
+    </div>
   </nav>
-  <!--tools-->
+  <!--pagetools-->
 </aside>
+<script>
+  (function () {
+    var side = document.getElementById('ccm-side');
+    var timer = null;
+    function narrow() { return window.matchMedia('(max-width: 999px)').matches; }
+    function rail() { return !narrow() && document.documentElement.classList.contains('ccm-collapsed'); }
+    function closeAll(except) {
+      side.querySelectorAll('.ccm-sec.open').forEach(function (s) { if (s !== except) s.classList.remove('open'); });
+    }
+    function place(sec) {
+      // On the rail, line the panel up with its icon (kept on screen).
+      var sub = sec.querySelector('.ccm-sub'), btn = sec.querySelector('.ccm-sec-btn');
+      if (!sub || !btn || !rail()) return;
+      var top = btn.getBoundingClientRect().top;
+      sub.style.top = Math.max(8, Math.min(top, window.innerHeight - sub.offsetHeight - 8)) + 'px';
+    }
+    function open(sec) {
+      closeAll(sec);
+      sec.classList.add('open');
+      place(sec);
+      var input = sec.querySelector('.ccm-search input, input[type=search]');
+      if (input && sec.classList.contains('ccm-search')) input.focus();
+    }
+    window.ccmToggleSide = function () {
+      var c = document.documentElement.classList.toggle('ccm-collapsed');
+      closeAll();
+      try { localStorage.setItem('ccm-side', c ? 'collapsed' : 'open'); } catch (e) {}
+    };
+    side.addEventListener('click', function (e) {
+      var btn = e.target.closest('.ccm-sec-btn');
+      if (!btn || !(rail() || narrow())) return;
+      var sec = btn.parentNode;
+      if (sec.classList.contains('open')) sec.classList.remove('open'); else open(sec);
+    });
+    // On the rail, hovering an icon opens its panel too (a short delay so passing over icons doesn't flicker).
+    side.addEventListener('mouseover', function (e) {
+      if (!rail()) return;
+      var sec = e.target.closest('.ccm-sec');
+      clearTimeout(timer);
+      if (sec && !sec.classList.contains('open')) timer = setTimeout(function () { open(sec); }, 120);
+    });
+    side.addEventListener('mouseleave', function () {
+      if (!rail()) return;
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        if (!side.contains(document.activeElement) || document.activeElement === document.body) closeAll();
+      }, 350);
+    });
+    document.addEventListener('click', function (e) {
+      if (!side.contains(e.target)) closeAll();
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAll(); });
+    window.addEventListener('resize', function () { closeAll(); });
+  })();
+</script>

@@ -67,7 +67,8 @@ PERMISSIONS = {
     "view_cost":      {_SA, _A, _S},          # purchase / repair costs and totals
     "receive":        {_SA, _A, _SH},         # New Inventory
     "move":           {_SA, _A, _SH, _T},     # shelf transfers
-    "send_to_repair": {_SA, _A, _S, _SH},     # v1.15: open a core ticket for a stock item (replaced "unit_repair")
+    "send_to_repair": {_SA, _A, _S, _SH},
+    "shipping_view":  {_SA, _A, _S, _SH},     # v1.16: Shipping queue page (placeholder until the Shipping rework)     # v1.15: open a core ticket for a stock item (replaced "unit_repair")
     "client_view":    {_SA, _A, _S, _SH},
     "client_edit":    {_SA, _A, _S},
     "client_import":  {_SA, _A},              # link clients to Salesforce IDs from a CSV
@@ -230,7 +231,7 @@ def requires(perm):
 
 # --- Page chrome -----------------------------------------------------------
 
-USER_BLOCK = """<div style="margin-top:auto;padding:16px 13px 0;border-top:1px solid #ffffff22;font-size:12px;color:#b7c8d7">
+USER_BLOCK = """<div style="margin-top:auto;padding:16px 13px 0;border-top:1px solid rgba(255,255,255,.13);font-size:12px;color:#b7c8d7">
 {% if g.user %}{% if g.viewing_as %}<div style="background:#f5c451;color:#3a2a00;border-radius:7px;padding:7px 9px;margin-bottom:8px;font-weight:600">Viewing as {{ g.viewing_as }}
 <form method="post" action="/view-as" style="margin:6px 0 0"><input type="hidden" name="role" value=""><input type="hidden" name="next" value="{{ request.full_path }}"><button style="background:#3a2a00;color:#fff;border:0;border-radius:6px;padding:5px 9px;cursor:pointer;font:inherit;font-size:12px;margin:0">Back to SuperAdmin</button></form></div>{% endif %}
 Signed in as <b style="color:#fff">{{ g.user.username }}</b><br><span>{{ (g.user.roles or 'View only').replace(',', ' · ') }}</span><br>
@@ -251,7 +252,8 @@ def add_user_block(template_html):
     Pages mark the spot with <!--sidebar-->. Older pages with their own <aside> still get the search box
     and user panel added to it."""
     if "<!--sidebar-->" in template_html:
-        side = SIDEBAR.replace("<!--search-->", SEARCH_BOX, 1).replace("<!--tools-->", PAGE_TOOLS + USER_BLOCK, 1)
+        # v1.16: the signed-in panel sits in the sidebar's Account group; the page tools go at the end.
+        side = SIDEBAR.replace("<!--search-->", SEARCH_BOX, 1).replace("<!--user-->", USER_BLOCK, 1).replace("<!--pagetools-->", PAGE_TOOLS, 1)
         return template_html.replace("<!--sidebar-->", side, 1)
     if "<!--search-->" in template_html:
         return template_html.replace("<!--search-->", SEARCH_BOX, 1).replace("</aside>", PAGE_TOOLS + USER_BLOCK + "</aside>", 1)
@@ -298,6 +300,7 @@ ENDPOINT_PERMISSIONS = {
     ("inventory_new", "*"): "receive",
     ("transfer", "POST"): "move",
     ("send_to_repair", "POST"): "send_to_repair",
+    ("shipping", "*"): "shipping_view",
     ("repair_new", "*"): "rma_create",
     ("repair_update", "POST"): "rma_edit",
     ("core_update", "POST"): "core_work",

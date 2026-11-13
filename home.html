@@ -80,11 +80,46 @@
         min-width: 0
       }
       .top {
-        height: 65px;
+        min-height: 65px;
         background: white;
         border-bottom: 1px solid var(--line);
-        padding: 20px 32px;
-        font-weight: 650
+        padding: 14px 32px;
+        font-weight: 650;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap
+      }
+      /* v1.16: theme switch (Light / Dark / OLED), saved to the person's account by theme.py */
+      .themes {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 400;
+        font-size: 13px;
+        color: #697b8d
+      }
+      .themes .seg {
+        display: inline-flex;
+        border: 1px solid #cdd9e4;
+        border-radius: 999px;
+        padding: 3px;
+        background: #f3f6fa
+      }
+      .themes button {
+        border: 0;
+        background: none;
+        color: #182b3c;
+        font: inherit;
+        font-weight: 600;
+        padding: 5px 13px;
+        border-radius: 999px;
+        cursor: pointer
+      }
+      .themes button.on {
+        background: #245d86;
+        color: #ffffff
       }
       .content {
         padding: 28px 32px;
@@ -626,7 +661,16 @@
     <div class="shell">
       <!--sidebar-->
       <div class="main">
-        <header class="top">Home</header>
+        <header class="top">
+          <span>Home</span>
+          <span class="themes" role="group" aria-label="Theme">Theme
+            <span class="seg">
+              {% for key, name in theme_names.items() %}
+                <button type="button" data-theme-pick="{{ key }}" class="{% if current_theme == key %}on{% endif %}" aria-pressed="{{ 'true' if current_theme == key else 'false' }}">{{ name }}</button>
+              {% endfor %}
+            </span>
+          </span>
+        </header>
         <main class="content">
           {% with messages=get_flashed_messages() %}
             {% for m in messages %}
@@ -703,5 +747,14 @@
         </main>
       </div>
     </div>
+    <script>
+      // Theme switch: saved to your account (it follows you to any computer), then the page reloads in the new theme.
+      document.querySelectorAll('[data-theme-pick]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          fetch('/api/theme', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ theme: b.dataset.themePick }) })
+            .then(function (r) { if (r.ok) location.reload(); });
+        });
+      });
+    </script>
   </body>
 </html>

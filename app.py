@@ -8,6 +8,7 @@ from clients import register_client_routes,ensure_client_schema,resolve_client,s
 import repairs as R  # customer repair tickets: stages, queues, work log (repairs.py)
 import choices  # the location and manufacturer pick lists (choices.py)
 import history  # product history on the stock item page, Send to repair (history.py, v1.15)
+import theme, shipping  # Light/Dark/OLED themes (theme.py) and the Shipping queue placeholder (shipping.py), v1.16
 now_iso=R.now_iso
 BASE=Path(__file__).resolve().parent
 # The database location can be changed with the CCM_DB_PATH environment variable.
@@ -361,10 +362,13 @@ def sidebar_helpers():
    n={r[0]:r[1] for r in c.execute('SELECT status,COUNT(*) FROM units GROUP BY status')}
    n['repairs']=c.execute("SELECT COUNT(*) FROM customer_repairs WHERE stage<>'Closed'").fetchone()[0]
    n['cores']=c.execute("SELECT COUNT(*) FROM core_items WHERE stage NOT IN ('Converted to Stock','Returned to Stock')").fetchone()[0]
+   n['ship']=c.execute("SELECT COUNT(*) FROM customer_repairs WHERE stage='Ready to Ship'").fetchone()[0]
    return n
   finally:c.close()
  return {'sidebar_counts':sidebar_counts}
 choices.register_choices(app)
+theme.register_theme(app,conn)
+shipping.register_shipping_routes(app,conn)
 @app.get('/assets/<name>')
 def asset(name):
  # The rich text editor (Trix, MIT licence) is served from this app so pages don't depend on another site.
@@ -379,7 +383,7 @@ costs.register_cost_routes(app,conn)
 
 def init_db():
  c=conn()
- c.executescript(SCHEMA);R.ensure_repair_schema(c);ensure_entry_schema(c);cores.ensure_core_schema(c);ensure_user_schema(c);ensure_client_schema(c);home.ensure_home_schema(c);costs.ensure_cost_schema(c);ensure_product_schema(c);history.ensure_history_schema(c)
+ c.executescript(SCHEMA);R.ensure_repair_schema(c);ensure_entry_schema(c);cores.ensure_core_schema(c);ensure_user_schema(c);ensure_client_schema(c);home.ensure_home_schema(c);costs.ensure_cost_schema(c);ensure_product_schema(c);history.ensure_history_schema(c);theme.ensure_theme_schema(c)
  c.execute("UPDATE units SET status='Rental' WHERE UPPER(TRIM(location_raw))='RENTAL' AND status='On loan'")
  # On a host without a console, the first admin can come from environment variables.
  # This only runs while there are no users at all.

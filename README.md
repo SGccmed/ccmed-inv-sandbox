@@ -8,13 +8,19 @@ Internal web app for tracking CC Medical's ultrasound equipment: stock, cores, c
 
 The **home page** (click **CC Medical** at the top left of any page) has a big search bar, quick links, counts of what's waiting on you, your **Favorites** (☆ Favorite at the top right of any page) and the records you opened recently.
 
-**The sidebar** is the same on every page, in the same order, with the current page highlighted:
+**The sidebar** is the same on every page, in the same order, with the current page highlighted. Each group has an icon:
 
-- **Home**, **+ New Inventory**
-- **Inventory**: opens Active stock, with a drop-down to switch to Sold or All. **Loaners**, **Rental**, **Pending** and **Needs Review** show how many items each holds; Pending turns yellow and Needs Review red when they have any.
-- **Repairs**: Customer Repairs (RP) and Core Repairs (CR), each with its number of open tickets or cores.
-- **Reference**: Customers, Product Database.
-- **Admin** (Admins only): Users, Admin Mode.
+- **Home** (house)
+- **Inventory** (box): opens Active stock, with a drop-down to switch to Sold or All. **Loaners**, **Rental**, **Pending** and **Needs Review** show how many items each holds; Pending turns yellow and Needs Review red when they have any.
+- **Repairs** (wrench): Customer Repairs (RP) and Core Repairs (CR), each with its number of open tickets or cores.
+- **Reference** (file cabinet): Customers, Product Database.
+- **Shipping** (truck): + New Inventory (receiving) and the **Shipping queue**: repairs ready to ship (with a count), items out on loan or rental, and placeholders for stock orders and expected arrivals until the Shipping rework.
+- **Admin** (gear, Admins only): Users, Admin Mode.
+- **Account** (person): who you're signed in as, Change password, View as, Sign out.
+
+**Collapsing it (since v1.16):** on a wide screen the « button at the top folds the sidebar into a thin rail of icons; click or hover an icon to open its links beside it. Your browser remembers the choice. On narrower windows and phones the sidebar is a bar of icons across the top; tap one to open its links under the bar. A red dot on the Inventory icon means items need review (yellow: pending).
+
+**Themes (since v1.16):** Light, Dark (blue/black) and OLED (true black, dark blue) are picked in the **Home** page header. The choice is saved to your account, so it follows you to any computer. `theme.py` applies it to every page.
 
 Links a role can't use aren't shown (technicians don't see Loaners or Rental). The total recorded cost of stock (active, and out on loan or rental) is on the **home page for Admins and SuperAdmins** only.
 
@@ -36,6 +42,8 @@ Every page needs a staff login. Serial numbers are **not** unique keys: a matchi
 | `app.py` | Main app: stock list (`/inventory`), receiving, backup/restore, spreadsheet import |
 | `home.py`, `home.html` | Home page: search, work tiles, favorites and recent pages |
 | `choices.py` | The pick lists: inventory locations and manufacturers (both locked). Edit the lists here to add or rename one |
+| `theme.py` | Light / Dark / OLED: the palettes and the colour swap applied to every page for the signed-in person's theme |
+| `shipping.py` | The Shipping queue page (a first version until the Shipping rework) |
 | `history.py` | The stock item's Product history (newest first) and Send to repair |
 | `costs.py` | Cost adjustments (Admins): corrects a cost or quoted price with a required reason, keeps the history |
 | `cores.py` | Core repairs: ticket updates, statuses, costs, converting to stock |
@@ -44,7 +52,7 @@ Every page needs a staff login. Serial numbers are **not** unique keys: a matchi
 | `trix.js`, `trix.css` | Trix rich text editor (open source, MIT licence, by 37signals), served by the app itself |
 | `repairs.py` | Customer repair tickets: the stages, who can move each one, queues, work log |
 | `search.py` | Search across customers, tickets, stock and cores |
-| `sidebar.html` | The one sidebar used on every page (items, counts, highlighting) |
+| `sidebar.html` | The one sidebar used on every page: icon groups, counts, highlighting, collapse to icons, top bar on phones |
 | `search_box.html` | The search box shown at the top of every sidebar |
 | `salesforce.py` | Linking customers to their Salesforce Account IDs (CSV import) |
 | `auth.py` | Logins, roles and permissions (`PERMISSIONS`), the Users page, loading staff accounts |
