@@ -6,6 +6,7 @@ from openpyxl import load_workbook
 from auth import register_auth,ensure_user_schema,create_user,add_user_block,validate_password,can,roles_of,seed_users_from_env,ADMIN_ROLES
 from clients import register_client_routes,ensure_client_schema,resolve_client,serial_matches,serial_key,client_label
 import repairs as R  # customer repair tickets: stages, queues, work log (repairs.py)
+import choices  # the location and manufacturer pick lists (choices.py)
 now_iso=R.now_iso
 BASE=Path(__file__).resolve().parent
 # The database location can be changed with the CCM_DB_PATH environment variable.
@@ -37,11 +38,12 @@ def conn():
  c=sqlite3.connect(DB,timeout=15);c.row_factory=sqlite3.Row;return c
 def norm(s):return re.sub(r'\s+',' ',str(s or '').strip()).upper()
 def classify(loc):
+ # Used by the spreadsheet import: turns an old "Location" cell into a status and a shelf.
  s=norm(loc)
  if s in ('SOLD','S0LD','CLOSED'):return 'Sold archive',None
- if s=='RENTAL':return 'Rental',None
- if s in ('LOAN','LOANER'):return 'On loan',None
  if s in ('PENDING','N'):return 'Pending review',None
+ known=choices.location(loc)
+ if known:return choices.location_status(known),known
  if re.match(r'^[A-Z]\d+(\s*/\s*[A-Z]\d+)?$',s):return 'Active',s.replace(' ','')
  return 'Needs review',None
 
@@ -141,6 +143,13 @@ def inventory_new():
   if row['type']=='RP':
    row['client']=resolve_client(c,row['customer'])
    if row['client'] is None:c.close();return f'Row {n}: customer "{row["customer"]}" is not in the client list. Pick one from the list or add it under Clients first.',400
+  row['manufacturer'],problem=choices.check_manufacturer(row['manufacturer'])
+  if problem:c.close();return f'Row {n}: '+problem,400
+  if row['location']:
+   loc=choices.location(row['location'])
+   if not loc:c.close();return f'Row {n}: "{row["location"]}" is not one of the locations. Pick one from the list.',400
+   if row['type']!='CC' and loc not in choices.PLACES:c.close();return f'Row {n}: Loan and Rental are only for stock (CC) items.',400
+   row['location']=loc
   try:
    if row['received_date']:date.fromisoformat(row['received_date'])
    row['cost_value']=amount(row['cost'],'Purchase cost')
@@ -165,7 +174,7 @@ def inventory_new():
    if typ=='CC':
     c.execute("""INSERT INTO units(manufacturer,product_raw,product_key,serial,cost,dom,notes,location_raw,physical_location,status,condition,review,inventory_code,supplier,received_date,entry_batch_id)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-     (row['manufacturer'],row['product'],norm(row['product']),row['serial'],row['cost_value'],'',row['notes'],row['location'],row['location'],'Active',row['condition'] or 'Unspecified','',code,row['supplier'],received,batch))
+     (row['manufacturer'],row['product'],norm(row['product']),row['serial'],row['cost_value'],'',row['notes'],row['location'],row['location'],choices.location_status(row['location']),row['condition'] or 'Unspecified','',code,row['supplier'],received,batch))
    elif typ=='CR':
     c.execute("""INSERT INTO core_items(inventory_code,manufacturer,product_raw,serial,location,supplier,original_cost,notes,created_at)
      VALUES (?,?,?,?,?,?,?,?,?)""",(code,row['manufacturer'],row['product'],row['serial'],row['location'],row['supplier'],row['cost_value'],row['notes'],now_iso()))
@@ -224,12 +233,16 @@ def unit(uid):
  return render_template_string(TEMPLATE,view=u['status'],unit=u,overview={},all_count=0,movements=moves,unit_repairs=unit_repairs,same_serial=same,adjustments=adjustments)
 @app.post('/transfer/<int:uid>')
 def transfer(uid):
- new=norm(request.form.get('location'));status,physical=classify(new)
- if status!='Active':flash('Transfer requires a recognized physical location');return redirect(url_for('unit',uid=uid))
+ # The new location must come from the list (choices.py). Loan and Rental also change the status;
+ # any other location makes the item Active again.
+ new=choices.location(request.form.get('location'))
+ if not new:flash('Pick a location from the list.');return redirect(url_for('unit',uid=uid))
+ status=choices.location_status(new)
  c=conn();u=c.execute('SELECT physical_location,status FROM units WHERE id=?',(uid,)).fetchone()
  if not u or u['status']=='Sold archive':c.close();return 'Sold records cannot be transferred',400
- if u['status'] in HIDDEN_STATUSES and not can('restricted_stock'):c.close();flash('Loaner and rental items are moved by Shipping or Sales.');return redirect(url_for('unit',uid=uid))
- c.execute('INSERT INTO movements(unit_id,old_location,new_location,note) VALUES (?,?,?,?)',(uid,u['physical_location'],physical,(request.form.get('note','').strip()+' ['+g.user['username']+']').strip()));c.execute('UPDATE units SET physical_location=?,status=? WHERE id=?',(physical,'Active',uid));c.commit();c.close();flash('Transfer recorded');return redirect(url_for('unit',uid=uid))
+ if (u['status'] in HIDDEN_STATUSES or status in HIDDEN_STATUSES) and not can('restricted_stock'):c.close();flash('Loaner and rental items are moved by Shipping or Sales.');return redirect(url_for('unit',uid=uid))
+ c.execute('INSERT INTO movements(unit_id,old_location,new_location,note) VALUES (?,?,?,?)',(uid,u['physical_location'],new,(request.form.get('note','').strip()+' ['+g.user['username']+']').strip()));c.execute('UPDATE units SET physical_location=?,status=? WHERE id=?',(new,status,uid));c.commit();c.close()
+ flash('Transfer recorded'+(f' · status now {status}' if status!=u['status'] else ''));return redirect(url_for('unit',uid=uid))
 @app.post('/repair/<int:uid>')
 def repair(uid):
  c=conn();u=c.execute('SELECT status FROM units WHERE id=?',(uid,)).fetchone()
@@ -299,6 +312,7 @@ import search, salesforce  # search box and results (search.py); Salesforce ID m
 import cores, formatting  # core repairs and ticket updates (cores.py); Pacific dates and note formatting (formatting.py)
 import home, costs  # home page, favorites and recent pages (home.py); cost adjustments with a reason (costs.py)
 formatting.register_formatting(app)
+choices.register_choices(app)
 @app.get('/assets/<name>')
 def asset(name):
  # The rich text editor (Trix, MIT licence) is served from this app so pages don't depend on another site.

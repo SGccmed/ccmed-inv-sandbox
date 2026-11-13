@@ -15,6 +15,7 @@ from auth import ADMIN_ROLES, add_user_block, can, roles_of
 from clients import client_label, resolve_client, serial_matches
 from formatting import clean_note, today_pacific, work_hours
 import costs
+import choices
 
 # ---------------------------------------------------------------------------
 # Stages
@@ -451,6 +452,14 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
         roles = roles_of(g.user)
         if not assigned and 'Technician' in roles and not (roles & ADMIN_ROLES):
             assigned = g.user['username']          # a tech opening a ticket is assigned to it
+        fields = {k: f.get(k, '').strip() for k in ('manufacturer', 'model', 'part_number', 'serial', 'location', 'notes')}
+        fields['manufacturer'], problem = choices.check_manufacturer(fields['manufacturer'])
+        if problem:
+            c.close(); flash(problem); return redirect(url_for('repair_new'))
+        if fields['location']:
+            fields['location'] = choices.location(fields['location']) or ''
+            if fields['location'] not in choices.PLACES:
+                c.close(); flash('Pick the location from the list.'); return redirect(url_for('repair_new'))
         received = f.get('received_date', '').strip()
         try:
             date.fromisoformat(received)
@@ -458,7 +467,7 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
             c.close(); flash('Enter a valid received date.'); return redirect(url_for('repair_new'))
         try:
             rid = create_ticket(c, client=client, rma=f.get('rma', ''), received=received,
-                                fields={k: f.get(k, '').strip() for k in ('manufacturer', 'model', 'part_number', 'serial', 'location', 'notes')},
+                                fields=fields,
                                 assigned_to=assigned, note='Ticket created')
             c.commit()
         except sqlite3.IntegrityError:
@@ -537,13 +546,20 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
             return f.get(name, '').strip()
 
         # Location: anyone who can edit tickets (techs move units between racks).
-        if 'location' in f:
-            changes['location'] = text('location')
+        if 'location' in f and text('location') != (r['location'] or ''):
+            loc = choices.location(text('location')) if text('location') else ''
+            if loc is None or (loc and loc not in choices.PLACES):
+                c.close(); flash('Pick the location from the list.'); return redirect(url_for('repair_detail', rid=rid))
+            changes['location'] = loc
         # Equipment corrections (serial, model, ...): Shipping, Sales and Admins, not technicians.
         if can('repair_equipment_edit'):
             for name in ('manufacturer', 'model', 'part_number', 'serial'):
                 if name in f:
                     changes[name] = text(name)
+            if 'manufacturer' in changes:   # an unchanged old value is kept; a new one must be on the list
+                changes['manufacturer'], problem = choices.check_manufacturer(changes['manufacturer'], r['manufacturer'])
+                if problem:
+                    c.close(); flash(problem); return redirect(url_for('repair_detail', rid=rid))
         # Client and RMA: Shipping, Sales and Admins.
         if can('rma_client_edit'):
             if 'customer' in f:

@@ -207,7 +207,7 @@
                   </div>
                   <div class="field">
                     <label>Manufacturer</label>
-                    <input name="manufacturer[]" placeholder="GE">
+                    <input name="manufacturer[]" list="dl-manufacturers" data-strict autocomplete="off" placeholder="Pick a manufacturer">
                   </div>
                   <div class="field">
                     <label>Model / Product *</label>
@@ -219,7 +219,7 @@
                   </div>
                   <div class="field">
                     <label>Location</label>
-                    <input name="location[]" placeholder="A1 / Repair Bench">
+                    <input name="location[]" list="dl-locations" data-strict autocomplete="off" placeholder="Pick a location">
                   </div>
                   <div class="field">
                     <label>Supplier</label>
@@ -335,6 +335,9 @@
           el.querySelectorAll('input').forEach(input => input.required = rp && ['customer[]'].includes(input.name))
         });
         row.querySelector('[name="supplier[]"]').closest('.field').style.display = rp ? 'none' : 'block';
+        // Loan and Rental are only for stock (CC); cores and repairs pick from the physical places.
+        row.querySelector('[name="location[]"]').setAttribute('list', sel.value === 'CC' ? 'dl-locations' : 'dl-places');
+        row.querySelector('[name="location[]"]').dispatchEvent(new Event('input', { bubbles: true }));
         row.querySelector('[name="cost[]"]').closest('.field').style.display = rp ? 'none' : 'block'
       }
 

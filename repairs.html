@@ -773,7 +773,7 @@
                   </div>
                   <div class="field">
                     <label>Manufacturer</label>
-                    <input name="manufacturer" placeholder="e.g. GE, Philips">
+                    <input name="manufacturer" list="dl-manufacturers" data-strict autocomplete="off" placeholder="Pick a manufacturer">
                   </div>
                   <div class="field">
                     <label>Model</label>
@@ -790,7 +790,7 @@
                   </div>
                   <div class="field">
                     <label>Location</label>
-                    <input name="location" placeholder="e.g. Repair rack R1">
+                    <input name="location" list="dl-places" data-strict autocomplete="off" placeholder="Pick a location, e.g. Repair">
                   </div>
                   <div class="field">
                     <label>Date received *</label>
@@ -1004,7 +1004,7 @@
                       {% endif %}
                       <div class="field">
                         <label>Manufacturer</label>
-                        <input name="manufacturer" value="{{r.manufacturer or ''}}" placeholder="e.g. GE, Philips" {% if not can('repair_equipment_edit') %}readonly title="Ask Shipping, Sales or an Admin to correct this"{% endif %}>
+                        <input name="manufacturer" value="{{r.manufacturer or ''}}" list="dl-manufacturers" data-strict data-current="{{r.manufacturer or ''}}" autocomplete="off" placeholder="Pick a manufacturer" {% if not can('repair_equipment_edit') %}readonly title="Ask Shipping, Sales or an Admin to correct this"{% endif %}>
                       </div>
                       <div class="field">
                         <label>Model</label>
@@ -1020,7 +1020,7 @@
                       </div>
                       <div class="field">
                         <label>Location</label>
-                        <input name="location" value="{{r.location or ''}}" placeholder="e.g. Repair rack R1">
+                        <input name="location" value="{{r.location or ''}}" list="dl-places" data-strict data-current="{{r.location or ''}}" autocomplete="off" placeholder="Pick a location, e.g. Repair">
                       </div>
                       <div class="field">
                         <label>Assigned tech</label>

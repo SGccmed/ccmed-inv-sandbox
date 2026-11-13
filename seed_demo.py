@@ -39,12 +39,12 @@ for name in ['GE','Philips','Siemens','Canon/Toshiba','Samsung','Mindray','Fujif
 
 # ---------- Master product catalog ----------
 SYSTEMS = [('GE','LOGIQ E10'),('GE','Vivid E95'),('GE','Voluson E8'),('Philips','EPIQ 7'),('Philips','Affiniti 70'),
-           ('Siemens','ACUSON Sequoia'),('Canon/Toshiba','Aplio i800'),('Samsung','RS85'),('Mindray','Resona 7'),('Fujifilm/SonoSite','Edge II')]
+           ('Siemens/Acuson','Sequoia'),('Canon/Toshiba','Aplio i800'),('Samsung','RS85'),('BK','bk5000'),('SonoSite','Edge II')]
 PROBES = [('GE','C1-6-D',[0,2]),('GE','ML6-15-D',[0]),('GE','M5Sc-D',[1]),('Philips','C5-1',[3,4]),('Philips','eL18-4',[3]),
-          ('Philips','X5-1',[3,4]),('Siemens','5C1',[5]),('Canon/Toshiba','PVI-475BX',[6]),('Samsung','CA1-7A',[7]),
-          ('Mindray','SC5-1U',[8]),('Fujifilm/SonoSite','rC60xi',[9]),('Fujifilm/SonoSite','HFL50xp',[9])]
-PARTS = [('GE','LOGIQ Keyboard Assembly'),('Philips','EPIQ Power Supply'),('Siemens','Probe Port Connector'),
-         ('Fujifilm/SonoSite','Edge II Battery'),('GE','Trackball Assembly'),('Philips','Touchscreen Panel')]
+          ('Philips','X5-1',[3,4]),('Siemens/Acuson','5C1',[5]),('Canon/Toshiba','PVI-475BX',[6]),('Samsung','CA1-7A',[7]),
+          ('BK','E14C4t',[8]),('SonoSite','rC60xi',[9]),('SonoSite','HFL50xp',[9])]
+PARTS = [('GE','LOGIQ Keyboard Assembly'),('Philips','EPIQ Power Supply'),('Siemens/Acuson','Probe Port Connector'),
+         ('SonoSite','Edge II Battery'),('GE','Trackball Assembly'),('Philips','Touchscreen Panel')]
 prod_ids = {}
 def add_product(cat, mfg, model, status):
     name = f'{mfg} {model}'
@@ -70,7 +70,7 @@ def new_code(prefix, days_ago):
     code = f"{prefix}-{(NOW - timedelta(days=days_ago)).strftime('%m%d%y')}-{cur.lastrowid:03d}"
     c.execute('UPDATE inventory_id_sequence SET generated_id=? WHERE seq=?', (code, cur.lastrowid)); return code
 def serial(): return 'DM' + ''.join(rnd.choice('ABCDEFGHJKLMNPRSTUVWXYZ0123456789') for _ in range(8))
-SHELVES = [f'{r}{n}' for r in 'ABCD' for n in range(1, 6)]
+SHELVES = A.choices.SHELVES + ['T1', 'UG', '2D']          # locations from choices.py
 SUPPLIERS = ['Demo Medical Brokers', 'Sample Imaging Supply', 'Test Trade-In Co.', 'Placeholder Auctions']
 ALL_MODELS = [(m, x, 'SYS') for m, x in SYSTEMS] + [(m, x, 'PRB') for m, x, _ in PROBES] + [(m, x, 'PTS') for m, x in PARTS]
 def price(cat): return {'SYS': rnd.randrange(8000, 45000, 250), 'PRB': rnd.randrange(900, 7500, 50), 'PTS': rnd.randrange(80, 1800, 10)}[cat]
@@ -102,9 +102,10 @@ for b_days in (45, 21, 9, 2):
     n = rnd.randint(3, 6)
     batch = c.execute('INSERT INTO receiving_batches(created_at,item_count) VALUES (?,?)', (ts(b_days), n)).lastrowid
     for _ in range(n):
-        m, x, cat = rnd.choice(ALL_MODELS); shelf = rnd.choice(SHELVES)
+        m, x, cat = rnd.choice(ALL_MODELS); status = rnd.choice(['Active']*5+['Rental'])
+        shelf = 'Rental' if status == 'Rental' else rnd.choice(SHELVES)
         c.execute('INSERT INTO units(manufacturer,product_raw,product_key,serial,cost,dom,notes,location_raw,physical_location,status,condition,review,inventory_code,supplier,received_date,entry_batch_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-            (m, f'{m} {x}', A.norm(f'{m} {x}'), serial(), float(price(cat)), '', 'Demo receiving', shelf, shelf, rnd.choice(['Active']*5+['Rental']),
+            (m, f'{m} {x}', A.norm(f'{m} {x}'), serial(), float(price(cat)), '', 'Demo receiving', shelf, shelf, status,
              rnd.choice(['New','Refurbished','Used - Good']), '', new_code('CC', b_days), rnd.choice(SUPPLIERS), d(b_days), batch))
 
 # Location transfers and internal repair orders on some active units
@@ -156,7 +157,7 @@ for i, (path_name, stop, stage_days) in enumerate(plan, start=1):
         sn, m, x = c.execute('SELECT serial, manufacturer, model FROM customer_repairs WHERE id=?', (closed_std[0],)).fetchone()
     rid = R.create_ticket(c, client={'id': None, 'name': rnd.choice(CUSTOMERS)}, rma=f'RMA-DEMO-{1000 + i}',
                           received=d(received), code=new_code('RP', received), when=whens[0], note='Demo ticket created',
-                          fields={'manufacturer': m, 'model': x, 'serial': sn, 'location': rnd.choice(['R1', 'R2', 'R3']),
+                          fields={'manufacturer': m, 'model': x, 'serial': sn, 'location': 'Repair',
                                   'notes': rnd.choice(['Image dropout on elements', 'Cracked lens', 'Will not power on',
                                                        'Cable strain relief torn', 'Intermittent connector fault'])})
     upd = {}

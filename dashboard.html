@@ -567,7 +567,7 @@
                 {% if can('move') and (can('restricted_stock') or unit.status not in hidden_statuses) %}
                   <div class="actionbox">
                     <h3>Transfer location</h3>
-                    <form method="post" action="/transfer/{{unit.id}}"><input name="location" placeholder="A2 or B1/R2" required><input name="note" placeholder="Reason / note"><button>Record
+                    <form method="post" action="/transfer/{{unit.id}}"><input name="location" list="{{ 'dl-locations' if can('restricted_stock') else 'dl-places' }}" data-strict autocomplete="off" placeholder="Pick a location" required><input name="note" placeholder="Reason / note"><button>Record
                       Transfer</button></form>
                   </div>
                 {% endif %}

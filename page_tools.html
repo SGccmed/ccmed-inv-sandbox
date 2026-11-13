@@ -5,7 +5,27 @@
         form's submit button is greyed out until it's fixed.
      3. Work time: inside a form, inputs data-time="start" and data-time="end" fill in [data-time-total] (hours).
      4. Favorites: the ☆ Favorite button (top right) pins the page to your home page. Opening a record also
-        adds it to "Recent" on the home page. -->
+        adds it to "Recent" on the home page.
+     5. Pick lists (v1.10, manufacturers locked in v1.11): the drop-down lists below come from choices.py.
+        An input with list="dl-locations", "dl-places" or "dl-manufacturers" and data-strict must be a value
+        from its list: anything else turns red and greys out the submit button, like a bad cost
+        (data-current="<old value>" lets an unchanged old value stay). Typed values are tidied to the list's
+        spelling ("a1" becomes "A1", "cannon" becomes "Canon/Toshiba"). -->
+<datalist id="dl-locations">
+  {% for loc in LOCATIONS %}
+    <option value="{{ loc }}">
+  {% endfor %}
+</datalist>
+<datalist id="dl-places">
+  {% for loc in PLACES %}
+    <option value="{{ loc }}">
+  {% endfor %}
+</datalist>
+<datalist id="dl-manufacturers" data-aliases='{{ MANUFACTURER_ALIASES|tojson }}'>
+  {% for m in MANUFACTURERS %}
+    <option value="{{ m }}">
+  {% endfor %}
+</datalist>
 <style>
   a.brandlink,
   a.brandlink:hover {
@@ -140,31 +160,64 @@
       return '';
     }
 
+    // ---- Pick lists (locations must come from the list; manufacturers are suggestions) ----
+    function squash(v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+    function listOptions(input) {
+      var dl = document.getElementById(input.getAttribute('list') || '');
+      return dl ? Array.prototype.map.call(dl.options, function (o) { return o.value; }) : [];
+    }
+    function listMatch(input) {
+      var v = squash(input.value);
+      var dl = document.getElementById(input.getAttribute('list') || '');
+      var aliases = dl && dl.dataset.aliases ? JSON.parse(dl.dataset.aliases) : {};   // e.g. "cannon" -> "Canon/Toshiba"
+      return listOptions(input).filter(function (o) { return squash(o) === v; })[0] || aliases[v];
+    }
+    function pickProblem(input) {
+      var v = input.value.trim();
+      if (!v || listMatch(input)) return '';
+      if (input.dataset.current && squash(v) === squash(input.dataset.current)) return '';
+      return input.getAttribute('list') === 'dl-manufacturers' ? 'Pick a manufacturer from the list' : 'Pick a location from the list';
+    }
+
+    // One message box under a field, created when needed.
+    function note(input, cls, text) {
+      var box = input.parentNode.querySelector('.' + cls);
+      if (text && !box) {
+        box = document.createElement('div');
+        box.className = cls;
+        input.insertAdjacentElement('afterend', box);
+      }
+      if (box) {
+        box.textContent = text;
+        box.style.display = text ? 'block' : 'none';
+      }
+    }
+
     function checkForm(form) {
       var bad = false;
-      form.querySelectorAll('input[data-money]').forEach(function (input) {
-        var problem = moneyProblem(input.value);
-        var warn = input.parentNode.querySelector('.money-warn');
+      form.querySelectorAll('input[data-money], input[data-strict]').forEach(function (input) {
+        var problem = input.hasAttribute('data-money') ? moneyProblem(input.value) : pickProblem(input);
         input.classList.toggle('money-bad', !!problem);
-        if (problem && !warn) {
-          warn = document.createElement('div');
-          warn.className = 'money-warn';
-          input.insertAdjacentElement('afterend', warn);
-        }
-        if (warn) {
-          warn.textContent = problem;
-          warn.style.display = problem ? 'block' : 'none';
-        }
+        note(input, 'money-warn', problem);
         bad = bad || !!problem;
       });
       form.querySelectorAll('button:not([type=button])').forEach(function (b) {
         b.disabled = bad;
-        b.title = bad ? 'Fix the highlighted cost first' : '';
+        b.title = bad ? 'Fix the highlighted field first' : '';
       });
     }
 
     document.addEventListener('input', function (e) {
-      if (e.target.matches && e.target.matches('input[data-money]') && e.target.form) checkForm(e.target.form);
+      var t = e.target;
+      if (t.matches && t.matches('input[data-money], input[data-strict]') && t.form) checkForm(t.form);
+    });
+    // Leaving a list field: use the list's spelling.
+    document.addEventListener('change', function (e) {
+      var t = e.target;
+      if (!(t.matches && t.matches('input[list^="dl-"]'))) return;
+      var match = listMatch(t);
+      if (match) t.value = match;
+      if (t.form) checkForm(t.form);
     });
 
     // ---- Work time: Start / End -> Total hours ----

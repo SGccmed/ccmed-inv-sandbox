@@ -25,6 +25,7 @@ Every page needs a staff login. Serial numbers are **not** unique keys: a matchi
 |---|---|
 | `app.py` | Main app: stock list (`/inventory`), receiving, backup/restore, spreadsheet import |
 | `home.py`, `home.html` | Home page: search, work tiles, favorites and recent pages |
+| `choices.py` | The pick lists: inventory locations and manufacturers (both locked). Edit the lists here to add or rename one |
 | `costs.py` | Cost adjustments (Admins): corrects a cost or quoted price with a required reason, keeps the history |
 | `cores.py` | Core repairs: ticket updates, statuses, costs, converting to stock |
 | `formatting.py` | Pacific-time dates ("Oct 30, 2026"), safe display of rich text notes, work hours, sortable column headers |
@@ -105,6 +106,16 @@ A core is worked like a ticket. Technicians post **ticket updates**: the day wor
 | Converted to Stock | An Admin converted it into a CC stock item carrying the full cost |
 
 The core list can be sorted by any column and shows hours logged. Technicians can enter costs but never see amounts or totals; the cost summary is for Sales, Admin and SuperAdmin. Cores in the old QC status become In Repair automatically.
+
+## Locations and manufacturers
+
+Every location and manufacturer field (receiving, shelf transfers, repair tickets, product requests and edits) is a type-to-search drop-down. The lists live in `choices.py`.
+
+- **Locations** must come from the list: A1–A4, B1–B4, C1–C4, T1, UG, 2D, Loan, Rental, Repair, ACER, LEN, INT, PBO. Anything else turns the field red and greys out the save button, and the server refuses it too. Typing in lower case is fine (`a1` is saved as `A1`).
+- **Loan and Rental** also set a stock item's status (On loan / Rental); moving it to any other location makes it Active again. They're only offered for stock (CC) items, and technicians can't move items to or from them. Cores and repair tickets use the other locations.
+- **Repair** is a single location for now; it can be split into racks later by adding them to the list.
+- **Manufacturers** are a fixed list too (since v1.11): GE, Philips, Canon/Toshiba, SonoSite, BK, Siemens/Acuson, Samsung. Common variants ("Cannon", "Toshiba", "Acuson", "Fujifilm SonoSite") are saved with the list's spelling; any other make is refused, so a wrong manufacturer can't end up on a record. To receive a make that isn't listed, add it to `MANUFACTURERS` in `choices.py` first. The field can still be left blank.
+- Records saved before v1.10/v1.11 keep their old location or manufacturer until someone changes that field.
 
 ## Notes and costs
 
