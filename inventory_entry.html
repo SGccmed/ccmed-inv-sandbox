@@ -199,7 +199,7 @@
                   </div>
                   <div class="field">
                     <label>Model / Product *</label>
-                    <input name="product[]" required placeholder="L12-5">
+                    <input name="product[]" required list="dl-products" autocomplete="off" placeholder="Pick or type, e.g. C1-6-D">
                   </div>
                   <div class="field">
                     <label>Serial Number</label>
@@ -252,6 +252,11 @@
                 </div>
               </div>
             </div>
+            <datalist id="dl-products">
+              {% for p in product_options() %}
+                <option value="{{ p.model }}">{{ p.display_name }}</option>
+              {% endfor %}
+            </datalist>
             <datalist id="client-list">
               {% for c in client_options() %}
                 <option value="{{c.client_code}} · {{c.name}}">

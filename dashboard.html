@@ -514,6 +514,8 @@
                   <dt>{{label}}</dt>
                   <dd>{{val if val is not none and val!='' else '—'}}</dd>
                 {% endfor %}
+                <dt>Catalog product</dt>
+                <dd>{% if product %}<a href="/products/{{product.id}}">{{product.display_name}}</a>{% else %}<span class="muted">Not linked to a Product Database entry</span>{% endif %}</dd>
               </dl>
               {% if can('cost_adjust') or adjustments %}
                 <div class="actions">

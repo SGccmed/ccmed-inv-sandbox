@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>CC Medical | Product Database</title>
+    <!-- Product Database pages (v1.13): the product list with open stock requests (mode 'list'), one product's
+         stock by status (mode 'stock') or its catalog details (mode 'details'), and the admin edit page (mode 'edit').
+         Rendered by product_database.py. -->
+    <style>
+      :root {
+        --navy: #112a42;
+        --blue: #245d86;
+        --bg: #f3f6fa;
+        --ink: #182b3c;
+        --muted: #697b8d;
+        --line: #dfe7ef
+      }
+      * {
+        box-sizing: border-box
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 14px/1.5 system-ui, Segoe UI, Arial
+      }
+      a {
+        color: #21628b;
+        text-decoration: none
+      }
+      a:hover {
+        text-decoration: underline
+      }
+      main {
+        padding: 28px 30px 40px;
+        max-width: 1400px
+      }
+      h1 {
+        font-size: 26px;
+        margin: 0 0 4px
+      }
+      h2 {
+        font-size: 17px;
+        margin: 0 0 12px
+      }
+      .muted {
+        color: var(--muted)
+      }
+      .head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 18px
+      }
+      .head .buttons {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-right: 120px
+      }
+      .panel {
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 18px
+      }
+      .notice {
+        background: #e8f6eb;
+        border: 1px solid #c8e7cf;
+        padding: 11px 14px;
+        border-radius: 9px;
+        margin-bottom: 14px
+      }
+      .notice.warn {
+        background: #fff4dc;
+        border-color: #f0d49b
+      }
+      button,
+      .btn {
+        border: 0;
+        background: var(--blue);
+        color: #ffffff;
+        border-radius: 8px;
+        padding: 9px 14px;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 600;
+        display: inline-block
+      }
+      .btn:hover {
+        text-decoration: none
+      }
+      .btn.light,
+      button.light {
+        background: #e7f0f6;
+        color: var(--blue)
+      }
+      input,
+      select,
+      textarea {
+        padding: 9px 10px;
+        border: 1px solid #cdd9e4;
+        border-radius: 8px;
+        font: inherit;
+        background: #ffffff;
+        max-width: 100%
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        font-size: 12px;
+        margin: 10px 0 4px
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: flex-end
+      }
+      .row > div {
+        min-width: 0
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse
+      }
+      th,
+      td {
+        padding: 10px;
+        border-bottom: 1px solid #eaf0f5;
+        text-align: left;
+        vertical-align: middle
+      }
+      th {
+        font-size: 12px;
+        color: #667a8e;
+        background: #f6f9fb
+      }
+      td.num,
+      th.num {
+        text-align: right
+      }
+      .tablewrap {
+        overflow-x: auto
+      }
+      .pill {
+        display: inline-block;
+        border-radius: 20px;
+        padding: 3px 9px;
+        background: #edf3f8;
+        color: #3d5c76;
+        font-size: 12px;
+        white-space: nowrap
+      }
+      .pill.green {
+        background: #dcf3e6;
+        color: #236947
+      }
+      .zero {
+        color: #a9b6c2
+      }
+      .tabs {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 14px
+      }
+      .tabs a {
+        padding: 8px 13px;
+        border-radius: 8px;
+        background: #e9eff5;
+        color: #3d5c76;
+        font-weight: 600
+      }
+      .tabs a.on {
+        background: var(--blue);
+        color: #ffffff
+      }
+      .tabs a:hover {
+        text-decoration: none
+      }
+      .tabs .n {
+        font-weight: 400;
+        opacity: .85;
+        margin-left: 4px
+      }
+      .facts {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 18px
+      }
+      .fact {
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px 16px
+      }
+      .fact span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px
+      }
+      .fact strong {
+        font-size: 22px
+      }
+      .request-form {
+        display: none;
+        margin-bottom: 18px
+      }
+      .request-form:target,
+      .request-form.open {
+        display: block
+      }
+      .closebox {
+        width: 18px;
+        height: 18px;
+        cursor: pointer
+      }
+      .text p {
+        margin: 0 0 8px
+      }
+      .details-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+        gap: 18px;
+        align-items: start
+      }
+      .edit-block {
+        border-top: 1px solid #eaf0f5;
+        padding-top: 12px;
+        margin-top: 12px
+      }
+      @media (max-width: 900px) {
+        main {
+          padding: 16px 12px
+        }
+        .facts {
+          grid-template-columns: repeat(2, minmax(0, 1fr))
+        }
+        .details-grid {
+          grid-template-columns: 1fr
+        }
+        .head .buttons {
+          margin-right: 0
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!--sidebar-->
+    <main>
+      {% with messages = get_flashed_messages() %}
+        {% for m in messages %}
+          <div class="notice {% if m.startswith('⚠') %}warn{% endif %}">{{ m }}</div>
+        {% endfor %}
+      {% endwith %}
+
+      {# ================================================================== #}
+      {#  PRODUCT LIST + OPEN REQUESTS                                        #}
+      {# ================================================================== #}
+      {% if mode == 'list' %}
+        <div class="head">
+          <div>
+            <h1>Product Database</h1>
+            <div class="muted">Every model we stock, with how many we have. Open a product to see each unit and request it.</div>
+          </div>
+          <div class="buttons">
+            <a class="btn light" href="/products/request">Suggest a new product</a>
+          </div>
+        </div>
+
+        <div class="panel" id="requests">
+          <h2>
+            Open requests <span class="muted">· {{ open_requests|length }}</span>
+            <span class="muted" style="font-weight:400;font-size:13px">·
+              {% if show_closed %}<a href="/products#requests">hide closed</a>{% else %}<a href="/products?closed=1#requests">show recently closed</a>{% endif %}</span>
+          </h2>
+          {% if open_requests or (show_closed and closed_requests) %}
+            <div class="tablewrap">
+              <table>
+                <tr>
+                  <th>Product</th>
+                  <th class="num">Qty</th>
+                  <th>For customer</th>
+                  <th>Requested by</th>
+                  <th>When</th>
+                  <th>Note</th>
+                  <th>Done</th>
+                </tr>
+                {% for r in open_requests %}
+                  <tr>
+                    <td><a href="/products/{{ r.product_id }}"><strong>{{ r.display_name }}</strong></a>
+                      <div class="muted">{{ r.manufacturer or '' }} · {{ categories.get(r.category, r.category) }} · {{ r.available }} available</div></td>
+                    <td class="num">{{ r.quantity }}</td>
+                    <td>{% if r.customer_name %}{% if can('client_view') %}<a href="/clients/{{ r.client_id }}">{{ r.customer_name }}</a>{% else %}{{ r.customer_name }}{% endif %}{% else %}—{% endif %}</td>
+                    <td>{{ names.get(r.requested_by, r.requested_by) }}</td>
+                    <td>{{ r.created_at|daytime }}</td>
+                    <td><div class="text">{{ r.note|rich if r.note else '—' }}</div></td>
+                    <td>
+                      {% if r.can_close %}
+                        <form method="post" action="/products/requests/{{ r.id }}/close" style="margin:0">
+                          <input type="checkbox" class="closebox" title="Mark this request done" onchange="this.form.submit()">
+                        </form>
+                      {% else %}
+                        <span class="muted" title="Admins, the requester or the customer's sales rep can close it">—</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+                {% if show_closed %}
+                  {% for r in closed_requests %}
+                    <tr style="opacity:.6">
+                      <td><a href="/products/{{ r.product_id }}">{{ r.display_name }}</a></td>
+                      <td class="num">{{ r.quantity }}</td>
+                      <td>{{ r.customer_name or '—' }}</td>
+                      <td>{{ names.get(r.requested_by, r.requested_by) }}</td>
+                      <td>{{ r.created_at|daytime }}</td>
+                      <td><div class="text">{{ r.note|rich if r.note else '—' }}</div></td>
+                      <td><input type="checkbox" class="closebox" checked disabled title="Closed {{ r.closed_at|daytime }} by {{ names.get(r.closed_by, r.closed_by) }}">
+                        <div class="muted" style="font-size:11px">{{ names.get(r.closed_by, r.closed_by) }}, {{ r.closed_at|day }}</div></td>
+                    </tr>
+                  {% endfor %}
+                {% endif %}
+              </table>
+            </div>
+          {% else %}
+            <p class="muted" style="margin:0">No open requests. Open a product and click <strong>Request this item</strong> to ask for it.</p>
+          {% endif %}
+        </div>
+
+        <div class="panel">
+          <form class="row" style="margin-bottom:14px">
+            <div style="flex:1;min-width:220px">
+              <label>Search</label>
+              <input name="q" value="{{ q }}" placeholder="Model, manufacturer or OEM part number" style="width:100%">
+            </div>
+            <div>
+              <label>Manufacturer</label>
+              <select name="mfr">
+                <option value="">All</option>
+                {% for m in MANUFACTURERS %}
+                  <option {% if m == mfr %}selected{% endif %}>{{ m }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label>Type</label>
+              <select name="category">
+                <option value="">All</option>
+                {% for code, label in categories.items() %}
+                  <option value="{{ code }}" {% if code == category %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label style="display:flex;gap:6px;align-items:center;font-weight:400;font-size:14px;margin-bottom:10px">
+                <input type="checkbox" name="instock" value="1" {% if instock %}checked{% endif %}> In stock only</label>
+            </div>
+            <div><button>Filter</button> <a class="btn light" href="/products">Clear</a></div>
+          </form>
+          <h2>{{ rows|length }} product{{ '' if rows|length == 1 else 's' }}</h2>
+          <div class="tablewrap">
+            <table>
+              <tr>
+                <th>Product</th>
+                <th>Manufacturer</th>
+                <th>Type</th>
+                <th class="num">Available</th>
+                {% if can('restricted_stock') %}
+                  <th class="num">On loan / rental</th>
+                  <th class="num">Sold</th>
+                {% endif %}
+                {% if can('catalog_admin') %}<th>Review</th>{% endif %}
+              </tr>
+              {% for p in rows %}
+                <tr>
+                  <td><a href="/products/{{ p.id }}"><strong>{{ p.display_name }}</strong></a>{% if not p.active %} <span class="pill">Inactive</span>{% endif %}</td>
+                  <td>{{ p.manufacturer or '—' }}</td>
+                  <td>{{ categories.get(p.category, p.category) }}</td>
+                  <td class="num">{% if p.available %}<span class="pill green">{{ p.available }}</span>{% else %}<span class="zero">0</span>{% endif %}</td>
+                  {% if can('restricted_stock') %}
+                    <td class="num {% if not p.out_now %}zero{% endif %}">{{ p.out_now }}</td>
+                    <td class="num {% if not p.sold %}zero{% endif %}">{{ p.sold }}</td>
+                  {% endif %}
+                  {% if can('catalog_admin') %}<td class="muted">{{ p.review_status }}</td>{% endif %}
+                </tr>
+              {% else %}
+                <tr><td colspan="7" class="muted">No products match.</td></tr>
+              {% endfor %}
+            </table>
+          </div>
+        </div>
+
+      {# ================================================================== #}
+      {#  ONE PRODUCT: header, tabs, request form                             #}
+      {# ================================================================== #}
+      {% else %}
+        <p style="margin:0 0 10px"><a href="/products">← Product Database</a></p>
+        <div class="head">
+          <div>
+            <h1>{{ p.display_name }}</h1>
+            <div class="muted">{{ p.manufacturer or 'Manufacturer not set' }} · {{ categories.get(p.category, p.category) }}
+              {% if parts %} · OEM {{ parts|map(attribute='part_number')|join(', ') }}{% endif %}
+              {% if not p.active %} · <strong>Inactive</strong>{% endif %}</div>
+          </div>
+          <div class="buttons">
+            {% if mode != 'edit' %}
+              <a class="btn" href="#request" onclick="document.getElementById('request').classList.add('open')">Request this item</a>
+            {% endif %}
+            {% if can('catalog_admin') %}
+              {% if mode == 'edit' %}
+                <a class="btn light" href="/products/{{ p.id }}">Done editing</a>
+              {% else %}
+                <a class="btn light" href="/products/{{ p.id }}/edit">Edit product</a>
+              {% endif %}
+            {% endif %}
+          </div>
+        </div>
+
+        {% if mode != 'edit' %}
+          <div class="panel request-form" id="request">
+            <h2>Request this item</h2>
+            <p class="muted" style="margin-top:0">The request goes on the Product Database page with this product's details and your name.
+              An Admin, you, or the customer's sales rep ticks it off when it's handled.</p>
+            <form method="post" action="/products/{{ p.id }}/request-item">
+              <div class="row">
+                <div>
+                  <label>Quantity</label>
+                  <input name="quantity" type="number" min="1" max="999" value="1" required style="width:100px">
+                </div>
+                {% if can('client_view') %}
+                  <div style="min-width:260px">
+                    <label>For customer (optional)</label>
+                    <input name="customer" list="client-list" autocomplete="off" placeholder="Start typing a customer…" style="width:100%">
+                    <datalist id="client-list">
+                      {% for c in client_options() %}
+                        <option value="{{ c.client_code }} · {{ c.name }}">
+                      {% endfor %}
+                    </datalist>
+                  </div>
+                {% endif %}
+                <div style="flex:1;min-width:260px">
+                  <label>Note (optional)</label>
+                  <input name="note" maxlength="500" placeholder="e.g. needed by Friday, any condition is fine" style="width:100%">
+                </div>
+                <div><button>Send request</button></div>
+              </div>
+            </form>
+          </div>
+
+          <div class="tabs">
+            <a class="{% if mode == 'stock' %}on{% endif %}" href="/products/{{ p.id }}">Stock</a>
+            <a class="{% if mode == 'details' %}on{% endif %}" href="/products/{{ p.id }}?tab=details">Details</a>
+          </div>
+        {% endif %}
+
+        {# ---------------- STOCK: available / out / sold ---------------- #}
+        {% if mode == 'stock' %}
+          <div class="facts">
+            {% for key, label in groups %}
+              <div class="fact"><span>{{ label }}</span><strong>{{ counts[key] }}</strong></div>
+            {% endfor %}
+            <div class="fact"><span>Open requests</span><strong>{{ product_requests }}</strong></div>
+          </div>
+          <div class="panel">
+            <div class="tabs">
+              {% for key, label in groups %}
+                <a class="{% if key == group %}on{% endif %}" href="/products/{{ p.id }}?group={{ key }}">{{ label }}<span class="n">{{ counts[key] }}</span></a>
+              {% endfor %}
+            </div>
+            <form class="row" style="margin-bottom:12px">
+              <input type="hidden" name="group" value="{{ group }}">
+              <div>
+                <label>Location</label>
+                <select name="loc" onchange="this.form.submit()">
+                  <option value="">All locations</option>
+                  {% for l in locations %}
+                    <option {% if l == loc %}selected{% endif %}>{{ l }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div>
+                <label>Serial number</label>
+                <input name="sn" value="{{ sn }}" placeholder="All or part of a serial">
+              </div>
+              <div>
+                <label>Sort by</label>
+                <select name="sort" onchange="this.form.submit()">
+                  <option value="location" {% if sort == 'location' %}selected{% endif %}>Location</option>
+                  <option value="serial" {% if sort == 'serial' %}selected{% endif %}>Serial number</option>
+                  <option value="received" {% if sort == 'received' %}selected{% endif %}>Newest first</option>
+                </select>
+              </div>
+              <div><button>Show</button> <a class="btn light" href="/products/{{ p.id }}?group={{ group }}">Clear</a></div>
+            </form>
+            <div class="tablewrap">
+              <table>
+                <tr>
+                  <th>Inventory ID</th>
+                  <th>Serial number</th>
+                  <th>Location</th>
+                  <th>Status</th>
+                  <th>Condition</th>
+                  <th>Received</th>
+                  {% if can('view_cost') %}<th class="num">Cost</th>{% endif %}
+                </tr>
+                {% for u in units %}
+                  <tr>
+                    <td><a href="/unit/{{ u.id }}">{{ u.inventory_code or ('Legacy #' ~ u.id) }}</a></td>
+                    <td>{{ u.serial or '—' }}</td>
+                    <td>{{ u.physical_location or u.location_raw or '—' }}</td>
+                    <td><span class="pill">{{ u.status }}</span></td>
+                    <td>{{ u.condition or '—' }}</td>
+                    <td>{{ u.received_date|day if u.received_date else '—' }}</td>
+                    {% if can('view_cost') %}<td class="num">{{ '${:,.2f}'.format(u.cost) if u.cost is not none else '—' }}</td>{% endif %}
+                  </tr>
+                {% else %}
+                  <tr><td colspan="7" class="muted">None {{ dict(groups)[group]|lower }}{% if loc or sn %} for this filter{% endif %}.</td></tr>
+                {% endfor %}
+              </table>
+            </div>
+          </div>
+
+        {# ---------------- DETAILS: catalog information (read only) ---------------- #}
+        {% elif mode == 'details' %}
+          <div class="details-grid">
+            <div>
+              <div class="panel">
+                <h2>Manufacturer description</h2>
+                <div class="text">{{ p.short_description|rich if p.short_description else 'Not yet researched.' }}</div>
+                {% if p.description_source %}<a href="{{ p.description_source }}" target="_blank" rel="noopener">Description source</a>{% endif %}
+                <h2 style="margin-top:18px">Technical specifications</h2>
+                <div class="text">{{ p.technical_specs|rich if p.technical_specs else 'Not yet researched.' }}</div>
+                {% if p.spec_source %}<a href="{{ p.spec_source }}" target="_blank" rel="noopener">Specifications source</a>{% endif %}
+              </div>
+            </div>
+            <div>
+              <div class="panel">
+                <h2>OEM part numbers</h2>
+                {% for n in parts %}
+                  <p style="margin:0 0 6px">{{ n.part_number }} <span class="muted">· {{ n.verification }}{% if not n.active %} · Inactive{% endif %}</span>
+                    {% if n.source_url %}<a href="{{ n.source_url }}" target="_blank" rel="noopener">Source</a>{% endif %}</p>
+                {% else %}
+                  <p class="muted">No verified OEM part numbers.</p>
+                {% endfor %}
+                <a href="/products/request?product_id={{ p.id }}&request_type=Part Number">Suggest an OEM part number</a>
+              </div>
+              <div class="panel">
+                <h2>Compatibility</h2>
+                {% for s in systems %}<p style="margin:0 0 6px">System: <a href="/products/{{ s.id }}">{{ s.display_name }}</a></p>{% endfor %}
+                {% for s in probes %}<p style="margin:0 0 6px">Probe: <a href="/products/{{ s.id }}">{{ s.display_name }}</a></p>{% endfor %}
+                {% if not systems and not probes %}<p class="muted">None recorded.</p>{% endif %}
+              </div>
+              <div class="panel">
+                <h2>Change history</h2>
+                {% for h in history %}
+                  <p style="margin:0 0 6px">{{ h.created_at|daytime }} <span class="muted">· {{ h.action }} ({{ h.actor }})</span></p>
+                {% else %}
+                  <p class="muted">No edits recorded yet.</p>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+
+        {# ---------------- EDIT (Admins) ---------------- #}
+        {% elif mode == 'edit' %}
+          <div class="panel">
+            <h2>Product details</h2>
+            <form method="post" action="/products/{{ p.id }}/edit">
+              <div class="row">
+                <div>
+                  <label>Type</label>
+                  <select name="category">
+                    {% for code, label in categories.items() %}
+                      <option value="{{ code }}" {% if code == p.category %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div>
+                  <label>Manufacturer</label>
+                  <input name="manufacturer" value="{{ p.manufacturer or '' }}" list="dl-manufacturers" data-strict data-current="{{ p.manufacturer or '' }}" autocomplete="off">
+                </div>
+                <div>
+                  <label>Model</label>
+                  <input name="model" value="{{ p.model }}" required>
+                </div>
+                <div style="flex:1;min-width:240px">
+                  <label>Display name</label>
+                  <input name="display_name" value="{{ p.display_name }}" required style="width:100%">
+                </div>
+              </div>
+              <label>Manufacturer description</label>
+              <textarea name="short_description" rows="3" style="width:100%" data-rich>{{ p.short_description|editor_value }}</textarea>
+              <label>Description source URL</label>
+              <input name="description_source" value="{{ p.description_source or '' }}" style="width:100%">
+              <label>Technical specifications</label>
+              <textarea name="technical_specs" rows="4" style="width:100%" data-rich>{{ p.technical_specs|editor_value }}</textarea>
+              <label>Specifications source URL</label>
+              <input name="spec_source" value="{{ p.spec_source or '' }}" style="width:100%">
+              <div class="row">
+                <div>
+                  <label>Review status</label>
+                  <select name="review_status">
+                    <option {% if p.review_status == 'Pending Review' %}selected{% endif %}>Pending Review</option>
+                    <option {% if p.review_status == 'Approved' %}selected{% endif %}>Approved</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Active</label>
+                  <select name="active">
+                    <option value="1">Active</option>
+                    <option value="0" {% if not p.active %}selected{% endif %}>Inactive</option>
+                  </select>
+                </div>
+              </div>
+              <p><button>Save product</button></p>
+            </form>
+          </div>
+
+          <div class="panel">
+            <h2>OEM part numbers</h2>
+            <p class="muted" style="margin-top:0">Only mark a number Verified after checking a reliable source. Making one inactive keeps its history.</p>
+            <form method="post" action="/products/{{ p.id }}/parts/add" class="row">
+              <div><label>New OEM part number</label><input name="part_number" required maxlength="120"></div>
+              <div>
+                <label>Verification</label>
+                <select name="verification">
+                  <option>Pending Verification</option>
+                  <option>Verified</option>
+                </select>
+              </div>
+              <div style="flex:1;min-width:220px"><label>Source URL</label><input name="source_url" type="url" placeholder="https://…" style="width:100%"></div>
+              <div><button>Add</button></div>
+            </form>
+            {% for n in parts %}
+              <form method="post" action="/products/{{ p.id }}/parts/{{ n.id }}/edit" class="row edit-block">
+                <div><label>Part number</label><input name="part_number" required maxlength="120" value="{{ n.part_number }}"></div>
+                <div>
+                  <label>Verification</label>
+                  <select name="verification">
+                    {% for v in ('Pending Verification', 'Verified', 'Admin Approved - source review required') %}
+                      <option {% if n.verification == v %}selected{% endif %}>{{ v }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div>
+                  <label>Status</label>
+                  <select name="active">
+                    <option value="1" {% if n.active %}selected{% endif %}>Active</option>
+                    <option value="0" {% if not n.active %}selected{% endif %}>Inactive</option>
+                  </select>
+                </div>
+                <div style="flex:1;min-width:220px"><label>Source URL</label><input name="source_url" type="url" value="{{ n.source_url or '' }}" style="width:100%"></div>
+                <div><button class="light">Save</button></div>
+              </form>
+            {% endfor %}
+          </div>
+
+          {% if p.category == 'PRB' %}
+            <div class="panel">
+              <h2>Compatible systems</h2>
+              {% for s in systems %}<p style="margin:0 0 6px"><a href="/products/{{ s.id }}">{{ s.display_name }}</a></p>{% endfor %}
+              <form method="post" action="/products/{{ p.id }}/compatibility" class="row">
+                <div>
+                  <label>Add a system</label>
+                  <select name="system_id">
+                    {% for s in sysopts %}<option value="{{ s.id }}">{{ s.display_name }}</option>{% endfor %}
+                  </select>
+                </div>
+                <div style="flex:1;min-width:220px"><label>Source URL</label><input name="source_url" placeholder="Compatibility source" style="width:100%"></div>
+                <div><button>Add</button></div>
+              </form>
+            </div>
+          {% endif %}
+        {% endif %}
+      {% endif %}
+    </main>
+  </body>
+</html>

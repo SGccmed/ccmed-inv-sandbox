@@ -113,48 +113,49 @@
 <aside class="ccm-side">
   <a href="/" class="ccm-brand">CC Medical<small>Inventory Workspace</small></a>
   <!--search-->
-  {% set p = request.path %}
-  {% set v = request.args.get('view', 'Active') %}
-  {% set n = sidebar_counts() %}
-  {% set inv_views = ('Active', 'Sold archive', 'All') %}
+  {# Names start with sb_ so they never clash with a page's own variables (a page's `p` is its product). #}
+  {% set sb_path = request.path %}
+  {% set sb_view = request.args.get('view', 'Active') %}
+  {% set sb_n = sidebar_counts() %}
+  {% set sb_inv_views = ('Active', 'Sold archive', 'All') %}
   <nav class="ccm-nav">
-    <a class="ccm-link {% if p == '/' %}on{% endif %}" href="/">Home</a>
+    <a class="ccm-link {% if sb_path == '/' %}on{% endif %}" href="/">Home</a>
     {% if can('receive') %}
-      <a class="ccm-link {% if p == '/inventory/new' %}on{% endif %}" href="/inventory/new">+ New Inventory</a>
+      <a class="ccm-link {% if sb_path == '/inventory/new' %}on{% endif %}" href="/inventory/new">+ New Inventory</a>
     {% endif %}
 
     <div class="ccm-group">Inventory</div>
-    <a class="ccm-link {% if (p == '/inventory' and v in inv_views) or p.startswith('/unit/') %}on{% endif %}" href="/inventory">Inventory</a>
+    <a class="ccm-link {% if (sb_path == '/inventory' and sb_view in sb_inv_views) or sb_path.startswith('/unit/') %}on{% endif %}" href="/inventory">Inventory</a>
     {% if can('restricted_stock') %}
-      <a class="ccm-link {% if p == '/inventory' and v == 'On loan' %}on{% endif %}" href="/inventory?view=On%20loan">
-        <span>Loaners</span><span class="ccm-count">{{ n.get('On loan', 0) }}</span></a>
-      <a class="ccm-link {% if p == '/inventory' and v == 'Rental' %}on{% endif %}" href="/inventory?view=Rental">
-        <span>Rental</span><span class="ccm-count">{{ n.get('Rental', 0) }}</span></a>
+      <a class="ccm-link {% if sb_path == '/inventory' and sb_view == 'On loan' %}on{% endif %}" href="/inventory?view=On%20loan">
+        <span>Loaners</span><span class="ccm-count">{{ sb_n.get('On loan', 0) }}</span></a>
+      <a class="ccm-link {% if sb_path == '/inventory' and sb_view == 'Rental' %}on{% endif %}" href="/inventory?view=Rental">
+        <span>Rental</span><span class="ccm-count">{{ sb_n.get('Rental', 0) }}</span></a>
     {% endif %}
-    <a class="ccm-link {% if p == '/inventory' and v == 'Pending review' %}on{% endif %}" href="/inventory?view=Pending%20review">
-      <span>Pending</span><span class="ccm-count {% if n.get('Pending review') %}yellow{% endif %}">{{ n.get('Pending review', 0) }}</span></a>
-    <a class="ccm-link {% if p == '/inventory' and v == 'Needs review' %}on{% endif %}" href="/inventory?view=Needs%20review">
-      <span>Needs Review</span><span class="ccm-count {% if n.get('Needs review') %}red{% endif %}">{{ n.get('Needs review', 0) }}</span></a>
+    <a class="ccm-link {% if sb_path == '/inventory' and sb_view == 'Pending review' %}on{% endif %}" href="/inventory?view=Pending%20review">
+      <span>Pending</span><span class="ccm-count {% if sb_n.get('Pending review') %}yellow{% endif %}">{{ sb_n.get('Pending review', 0) }}</span></a>
+    <a class="ccm-link {% if sb_path == '/inventory' and sb_view == 'Needs review' %}on{% endif %}" href="/inventory?view=Needs%20review">
+      <span>Needs Review</span><span class="ccm-count {% if sb_n.get('Needs review') %}red{% endif %}">{{ sb_n.get('Needs review', 0) }}</span></a>
 
     <div class="ccm-group">Repairs</div>
-    <a class="ccm-link {% if p.startswith('/repairs') %}on{% endif %}" href="/repairs">
-      <span>Customer Repairs (RP)</span><span class="ccm-count" title="Open tickets">{{ n.repairs }}</span></a>
-    <a class="ccm-link {% if p.startswith('/cores') %}on{% endif %}" href="/cores">
-      <span>Core Repairs (CR)</span><span class="ccm-count" title="Open cores">{{ n.cores }}</span></a>
+    <a class="ccm-link {% if sb_path.startswith('/repairs') %}on{% endif %}" href="/repairs">
+      <span>Customer Repairs (RP)</span><span class="ccm-count" title="Open tickets">{{ sb_n.repairs }}</span></a>
+    <a class="ccm-link {% if sb_path.startswith('/cores') %}on{% endif %}" href="/cores">
+      <span>Core Repairs (CR)</span><span class="ccm-count" title="Open cores">{{ sb_n.cores }}</span></a>
 
     <div class="ccm-group">Reference</div>
     {% if can('client_view') %}
-      <a class="ccm-link {% if p.startswith('/clients') %}on{% endif %}" href="/clients">Customers</a>
+      <a class="ccm-link {% if sb_path.startswith('/clients') %}on{% endif %}" href="/clients">Customers</a>
     {% endif %}
-    <a class="ccm-link {% if p.startswith('/products') and not p.startswith('/products/admin') %}on{% endif %}" href="/products">Product Database</a>
+    <a class="ccm-link {% if sb_path.startswith('/products') and not sb_path.startswith('/products/admin') %}on{% endif %}" href="/products">Product Database</a>
 
     {% if can('users_manage') or can('catalog_admin') %}
       <div class="ccm-group">Admin</div>
       {% if can('users_manage') %}
-        <a class="ccm-link {% if p.startswith('/users') %}on{% endif %}" href="/users">Users</a>
+        <a class="ccm-link {% if sb_path.startswith('/users') %}on{% endif %}" href="/users">Users</a>
       {% endif %}
       {% if can('catalog_admin') %}
-        <a class="ccm-link {% if p.startswith('/products/admin') %}on{% endif %}" href="/products/admin">Admin Mode</a>
+        <a class="ccm-link {% if sb_path.startswith('/products/admin') %}on{% endif %}" href="/products/admin">Admin Mode</a>
       {% endif %}
     {% endif %}
   </nav>

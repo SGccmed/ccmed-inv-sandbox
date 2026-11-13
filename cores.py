@@ -226,6 +226,8 @@ def register_core_routes(app, conn, base_dir, inventory_code_maker, norm):
                              'Converted from ' + core['inventory_code'] + '; ' + (core['notes'] or ''), core['location'], core['location'],
                              'Active', 'Refurbished', '', code, None, date.today().isoformat()))
             now = now_iso()
+            from product_database import link_units      # tie the new stock item to its catalog product
+            link_units(c)
             c.execute('UPDATE core_items SET stage=?, stage_started_at=?, converted_unit_id=? WHERE id=?',
                       ('Converted to Stock', now, cur.lastrowid, cid))
             c.execute("""INSERT INTO core_transactions(core_id, performed_at, technician, description, labor_method, labor_hours, labor_rate,

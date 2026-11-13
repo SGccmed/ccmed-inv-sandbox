@@ -271,6 +271,7 @@ for name, cid in client_ids.items():
 src = c.execute("SELECT serial FROM units WHERE inventory_code LIKE 'CC-%' AND serial<>'' ORDER BY id LIMIT 1").fetchone()[0]
 c.execute("UPDATE core_items SET serial=? WHERE id=(SELECT MIN(id) FROM core_items)", (src,))
 
+P.link_units(c)      # tie stock items to their catalog products (v1.13)
 c.commit()
 counts = {t: c.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0] for t in
           ['units', 'movements', 'repair_orders', 'customer_repairs', 'repair_log', 'core_items', 'core_transactions', 'products', 'clients', 'client_contacts', 'client_activity', 'users']}

@@ -183,6 +183,7 @@ def inventory_new():
     R.create_ticket(c,client=row['client'],rma=row['rma'],received=received,code=code,
      fields={'manufacturer':row['manufacturer'],'model':row['product'],'serial':row['serial'],'location':row['location'],'notes':row['notes']},
      assigned_to=row['technician'],note='Received through New Inventory')
+  link_units(c)      # tie new stock items to their catalog product (see product_database.py)
   c.commit()
  except (sqlite3.Error,ValueError) as e:
   c.rollback();c.close()
@@ -228,9 +229,10 @@ def unit(uid):
  moves=c.execute('SELECT * FROM movements WHERE unit_id=? ORDER BY id DESC',(uid,)).fetchall()
  unit_repairs=c.execute('SELECT * FROM repair_orders WHERE unit_id=? ORDER BY id DESC',(uid,)).fetchall()
  same=serial_matches(c,u['serial'],exclude=('unit',uid))
+ product=c.execute('SELECT id,display_name FROM products WHERE id=?',(u['product_id'],)).fetchone() if u['product_id'] else None
  adjustments=costs.adjustments_for(c,f'/unit/{uid}') if can('view_cost') else []
  c.close()
- return render_template_string(TEMPLATE,view=u['status'],unit=u,overview={},all_count=0,movements=moves,unit_repairs=unit_repairs,same_serial=same,adjustments=adjustments)
+ return render_template_string(TEMPLATE,view=u['status'],unit=u,overview={},all_count=0,movements=moves,unit_repairs=unit_repairs,same_serial=same,adjustments=adjustments,product=product)
 @app.post('/transfer/<int:uid>')
 def transfer(uid):
  # The new location must come from the list (choices.py). Loan and Rental also change the status;
@@ -303,7 +305,7 @@ def restore_upload():
  if file_has_users:session.clear()
  return send_file(safety,as_attachment=True,download_name=safety.name)
 
-from product_database import register_product_routes
+from product_database import register_product_routes, ensure_product_schema, link_units
 register_auth(app,conn)
 register_product_routes(app,conn,BASE)
 register_client_routes(app,conn)
@@ -339,7 +341,7 @@ costs.register_cost_routes(app,conn)
 
 def init_db():
  c=conn()
- c.executescript(SCHEMA);R.ensure_repair_schema(c);ensure_entry_schema(c);cores.ensure_core_schema(c);ensure_user_schema(c);ensure_client_schema(c);home.ensure_home_schema(c);costs.ensure_cost_schema(c)
+ c.executescript(SCHEMA);R.ensure_repair_schema(c);ensure_entry_schema(c);cores.ensure_core_schema(c);ensure_user_schema(c);ensure_client_schema(c);home.ensure_home_schema(c);costs.ensure_cost_schema(c);ensure_product_schema(c)
  c.execute("UPDATE units SET status='Rental' WHERE UPPER(TRIM(location_raw))='RENTAL' AND status='On loan'")
  # On a host without a console, the first admin can come from environment variables.
  # This only runs while there are no users at all.

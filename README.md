@@ -48,6 +48,7 @@ Every page needs a staff login. Serial numbers are **not** unique keys: a matchi
 | `salesforce.py` | Linking customers to their Salesforce Account IDs (CSV import) |
 | `auth.py` | Logins, roles and permissions (`PERMISSIONS`), the Users page, loading staff accounts |
 | `clients.py` | Customers pages (their HTML is inside this file) |
+| `products.html` | Product Database screens: product list with open requests, a product's stock and details, the admin edit page |
 | `product_database.py` | Product Database pages (their HTML is inside this file) |
 | `dashboard.html` | Stock list and single-item page |
 | `inventory_entry.html` | + New Inventory receiving form |
@@ -138,6 +139,14 @@ Every location and manufacturer field (receiving, shelf transfers, repair ticket
 ## Dates
 
 Every date is shown in Pacific time as **Oct 30, 2026**; work logs and updates add the time (**Oct 30, 2026 · 2:15 PM**). Dates are stored in UTC.
+
+## Product Database and stock requests
+
+- **Product list**: every model with how many are **Available**, **On loan / rental** and **Sold**, filtered by search, manufacturer, type and "in stock only". The review status column is for Admins.
+- **A product's page** opens on **Stock**: the units we have, in three groups (Available, On loan / rental, Sold), each narrowed by location or serial and sorted by location, serial or newest. **Details** holds the manufacturer description, specs, OEM part numbers, compatibility and history. Admins use **Edit product** for all changes. Technicians only see what's available.
+- **Linking units to products**: each stock item is tied to its catalog product when its model matches the product's name (e.g. "GE C1-6-D REFURB" → GE C1-6-D). This happens on start-up, when items are received and when the catalog changes. The + New Inventory model box suggests catalog models, and each item's page links its product.
+- **Request this item** (on a product's page): quantity, optional customer, optional note. Requests are listed at the top of the Product Database page until someone ticks **Done**: an Admin, the person who asked, or the customer's sales rep. Recently closed requests can be shown again. (Email notifications and closing automatically when a unit is received are planned.)
+- **Suggest a new product** is for adding models or OEM part numbers to the catalog; Admins approve these in Admin Mode.
 
 ## Search
 

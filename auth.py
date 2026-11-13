@@ -78,6 +78,8 @@ PERMISSIONS = {
     "restricted_stock": {_SA, _A, _S, _SH},   # Sold archive, Loaners and Rental lists (not needed by the repair team)
     "cost_adjust":    {_SA, _A},              # adjust a recorded cost or price, with a reason
     "inventory_value": {_SA, _A},             # total stock value tiles on the home page
+    "stock_request":  {_SA, _A, _S, _SH, _T}, # "Request this item" on a product page
+    "stock_request_close": {_SA, _A},         # tick off anyone's request (the requester and the customer's rep can close their own)
     # Repair tickets (repairs.py). Who may MOVE a ticket depends on whose turn it is: see STAGES in repairs.py.
     "repair_assign":  {_SA, _A, _T},          # assign a tech to a ticket
     "repair_eval":    {_SA, _A, _T},          # write eval findings
