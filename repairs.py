@@ -67,7 +67,8 @@ STAGES = {
     'Ready to Ship': {
         'team': 'Shipping', 'hold': False,
         'guide': "Shipping: pack it and send it back to the customer, then post a ticket update moving it to "
-                 "Shipped with the carrier and tracking number. Shipping can close it afterwards.",
+                 "Shipped with the carrier and tracking number. Shipping can close it afterwards. Want a tech to "
+                 "look it over first (for example a partner repair)? Pick In Repair (send to a tech for inspection).",
     },
     'Shipped': {
         'team': 'Admin', 'hold': False,
@@ -82,8 +83,14 @@ STAGES = {
     'At Partner': {
         'team': 'Sales', 'hold': True,
         'guide': "Outsourced (on hold). Log the partner, their price and any partner RMA in the work log. "
-                 "Partner's report in: move to Eval Complete. Repair done: move to Ready to Ship, or to "
-                 "Shipped if the partner blind-ships to the customer on our label.",
+                 "Partner's evaluation in: move to Eval Complete so Sales can quote it. Once approved and repaired: "
+                 "Returning from Partner if it comes back to the office (with the partner's tracking), or Shipped if "
+                 "the partner ships it straight to the customer on our label. Sales or Shipping can make those moves.",
+    },
+    'Returning from Partner': {      # v1.20
+        'team': 'Shipping', 'hold': False,
+        'guide': "On its way back to the office from the partner (tracking below). Shipping: when it arrives, move it "
+                 "to Ready to Ship, or to In Repair if a tech should inspect it first.",
     },
     'Declined': {
         'team': 'Sales', 'hold': False,
@@ -110,17 +117,31 @@ NEXT = {
     'In Repair': ['Waiting on Parts', 'Repair Complete', 'Unrepairable'],
     'Waiting on Parts': ['In Repair'],
     'Repair Complete': ['Ready to Ship'],
-    'Ready to Ship': ['Shipped'],
+    'Ready to Ship': ['Shipped', 'In Repair'],
     'Shipped': ['Closed'],
     'Closed': [],
-    'At Partner': ['Eval Complete', 'Ready to Ship', 'Shipped'],
+    'At Partner': ['Eval Complete', 'Returning from Partner', 'Shipped', 'Ready to Ship'],
+    'Returning from Partner': ['Ready to Ship', 'In Repair'],
     'Declined': ['Ready to Ship'],
     'Unrepairable': ['Closed', 'Ready to Ship'],
 }
 # Which role acts for each team. "Admin" means the Admin or SuperAdmin role.
 TEAM_ROLE = {'Repair team': 'Technician', 'Sales': 'Sales', 'Shipping': 'Shipping'}
 # Moves another team may also make (Sales coordinates outsourced repairs; Shipping closes what it shipped, v1.19).
-EXTRA_MOVES = {('Received', 'At Partner'): 'Sales', ('Approved', 'At Partner'): 'Sales', ('Shipped', 'Closed'): 'Shipping'}
+EXTRA_MOVES = {('Received', 'At Partner'): 'Sales', ('Approved', 'At Partner'): 'Sales', ('Shipped', 'Closed'): 'Shipping',
+               ('At Partner', 'Returning from Partner'): 'Shipping', ('At Partner', 'Shipped'): 'Shipping'}   # v1.20
+# v1.20: what a move is called in the Status update drop-down when the stage name alone isn't clear.
+MOVE_LABELS = {
+    ('At Partner', 'Eval Complete'): "Eval Complete (partner's evaluation is in)",
+    ('At Partner', 'Returning from Partner'): 'Returning from Partner (coming back to the office)',
+    ('At Partner', 'Shipped'): 'Shipped (partner ships straight to the customer)',
+    ('At Partner', 'Ready to Ship'): 'Ready to Ship (already back at the office)',
+    ('Returning from Partner', 'Ready to Ship'): 'Ready to Ship (arrived at the office)',
+    ('Returning from Partner', 'In Repair'): 'In Repair (arrived; send to a tech for inspection)',
+    ('Ready to Ship', 'In Repair'): 'In Repair (send to a tech for inspection)',
+}
+# Moves that take a carrier and tracking number: out to the customer, or back from the partner (v1.20).
+TRACKED_MOVES = ('Shipped', 'Returning from Partner')
 
 RESOLUTIONS = ['Repaired', 'Warranty', 'Declined', 'Exchanged', 'Returned unrepaired']
 TEAMS = ['Repair team', 'Sales', 'Shipping', 'Admin']
@@ -177,6 +198,9 @@ NEW_COLUMNS = [
     ('carrier', 'TEXT'),            # v1.17: how it went back (CARRIERS), the tracking number and when
     ('tracking_number', 'TEXT'),
     ('shipped_at', 'TEXT'),
+    ('inbound_carrier', 'TEXT'),    # v1.20: the partner's shipment back to the office
+    ('inbound_tracking', 'TEXT'),
+    ('inbound_shipped_at', 'TEXT'),
 ]
 # v1.09: a work-log entry can be a "ticket update" with the day worked, start/end time and costs.
 LOG_COLUMNS = [('work_date', 'TEXT'), ('work_start', 'TEXT'), ('work_end', 'TEXT'), ('hours', 'REAL'),
@@ -392,7 +416,8 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
                 return tech_list(c)
             finally:
                 c.close()
-        return {'tech_options': tech_options, 'tracking_url': tracking_url}
+        return {'tech_options': tech_options, 'tracking_url': tracking_url,
+                'move_label': lambda frm, to: MOVE_LABELS.get((frm, to), to)}
 
     # ----- Queue (list) -----
     @app.route('/repairs')
@@ -538,6 +563,9 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
         adjustments = costs.adjustments_for(c, f'/repairs/{rid}') if can('view_cost') else []
         c.close()
         updates = [e for e in work_log if e['kind'] == 'update']
+        # v1.20: after approval, At Partner's main choices are the ways back; another evaluation stays possible but
+        # is listed apart ("Additional eval / re-quote") so a repaired unit doesn't loop back to Sales by mistake.
+        approved_before = any(e['new_stage'] == 'Approved' for e in work_log)
         return render(mode='detail', today=today_pacific().isoformat(), adjustments=adjustments, same_stock=same_stock,
                       total_hours=sum(e['hours'] or 0 for e in updates),
                       parts_total=sum(e['parts_cost'] or 0 for e in updates),
@@ -546,7 +574,7 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
                       all_moves=[s for s in STAGE_NAMES if s != t['stage']] if is_admin() else [],
                       work_log=work_log, client=client, client_text=client_label(client) if client else r['customer'],
                       same_serial=same_serial, earlier=earlier, warranty_of=warranty_of, returns=returns,
-                      techs=techs, names=names)
+                      techs=techs, names=names, approved_before=approved_before)
 
     # ----- Move to another stage -----
     @app.post('/repairs/<int:rid>/move')
@@ -614,6 +642,13 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
                 changes['carrier'] = carrier or None
             if 'tracking_number' in f:
                 changes['tracking_number'] = text('tracking_number')[:100] or None
+            if 'inbound_carrier' in f:
+                carrier = text('inbound_carrier')
+                if carrier and carrier not in CARRIERS:
+                    c.close(); flash('Pick the carrier from the list.'); return redirect(url_for('repair_detail', rid=rid))
+                changes['inbound_carrier'] = carrier or None
+            if 'inbound_tracking' in f:
+                changes['inbound_tracking'] = text('inbound_tracking')[:100] or None
         if can('repair_assign') and 'assigned_to' in f:
             changes['assigned_to'] = text('assigned_to') or None
         if can('repair_eval') and 'eval_findings' in f:
@@ -691,7 +726,7 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
             if target not in allowed_moves(r) and not is_admin():
                 c.close(); flash(f"Your role can't move this ticket from {r['stage']} to {target}."); return back
         ship = {}
-        if target == 'Shipped':
+        if target in TRACKED_MOVES:
             carrier, tracking = f.get('carrier', '').strip(), f.get('tracking_number', '').strip()
             if carrier not in CARRIERS:
                 c.close(); flash('Pick the carrier it shipped with.'); return back
@@ -708,10 +743,14 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
                 actor = pick
         now = now_iso()
         ship_line = ''
-        if ship:
+        if ship and target == 'Shipped':
             c.execute('UPDATE customer_repairs SET carrier=?, tracking_number=?, shipped_at=? WHERE id=?',
                       (ship['carrier'], ship['tracking_number'], now, rid))
             ship_line = f"Shipped by {ship['carrier']}" + (f", tracking {ship['tracking_number']}" if ship['tracking_number'] else '')
+        elif ship:      # v1.20: Returning from Partner
+            c.execute('UPDATE customer_repairs SET inbound_carrier=?, inbound_tracking=?, inbound_shipped_at=? WHERE id=?',
+                      (ship['carrier'], ship['tracking_number'], now, rid))
+            ship_line = f"Partner shipped it back by {ship['carrier']}" + (f", tracking {ship['tracking_number']}" if ship['tracking_number'] else '')
         only_move = target and not (body or parts or other or hrs or link)
         if target:
             move_ticket(c, r, target, ship_line, f.get('resolution', ''), when=now, log_it=bool(only_move))
@@ -737,7 +776,8 @@ LABELS = {'manufacturer': 'manufacturer', 'model': 'model', 'part_number': 'part
           'location': 'location', 'customer': 'client', 'rma': 'RMA', 'assigned_to': 'assigned tech',
           'eval_findings': 'eval findings', 'quoted_price': 'quoted price', 'estimate_number': 'estimate number',
           'invoice_number': 'invoice number', 'warranty': 'warranty', 'warranty_of_id': 'warranty link',
-          'resolution': 'resolution', 'carrier': 'carrier', 'tracking_number': 'tracking number'}
+          'resolution': 'resolution', 'carrier': 'carrier', 'tracking_number': 'tracking number',
+          'inbound_carrier': 'partner carrier', 'inbound_tracking': 'partner tracking number'}
 QUIET = {'eval_findings', 'quoted_price', 'client_id', 'warranty_of_id'}   # logged without values
 
 

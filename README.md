@@ -14,7 +14,7 @@ The **home page** (click **CC Medical** at the top left of any page) has a big s
 - **Inventory** (box): **+ New Inventory** (receiving; Admins and Shipping), then Inventory, which opens Active stock, with a drop-down to switch to Sold or All. **Loaners**, **Rental**, **Pending** and **Needs Review** show how many items each holds; Pending turns yellow and Needs Review red when they have any.
 - **Repairs** (wrench): Customer Repairs (RP) and Core Repairs (CR), each with its number of open tickets or cores.
 - **Reference** (file cabinet): Customers, Product Database.
-- **Shipping** (truck): the **Shipping queue**: repairs ready to ship (with a count), items out on loan or rental, and placeholders for stock orders and expected arrivals until the Shipping rework.
+- **Shipping** (truck): the **Shipping queue**: repairs ready to ship (with a count), repairs returning from a partner (Inbound), items out on loan or rental, and placeholders for stock orders and expected arrivals until the Shipping rework.
 - **Admin** (gear, Admins only): Users, Admin Mode.
 - **Account** (person): who you're signed in as, Change password, View as, Sign out.
 
@@ -97,16 +97,19 @@ Each customer repair is a ticket with one owner at each stage, like an IT helpde
 | In Repair | Repair team | Repair Complete, Waiting on Parts, or Unrepairable |
 | Waiting on Parts | Repair team (on hold) | In Repair |
 | Repair Complete | Sales | Ready to Ship |
-| Ready to Ship | Shipping | Shipped |
+| Ready to Ship | Shipping | Shipped, or In Repair (send to a tech for inspection) |
 | Shipped | Shipping or Admin (Admin adds the invoice #) | Closed |
 | Closed | — | Admin can reopen |
-| At Partner | Sales (on hold) | Eval Complete, Ready to Ship, or Shipped |
+| At Partner | Sales (on hold) | Eval Complete, Returning from Partner, Shipped, or Ready to Ship |
+| Returning from Partner | Shipping | Ready to Ship, or In Repair (inspection) |
 | Declined | Sales | Ready to Ship (returned free) |
 | Unrepairable | Sales | Closed (exchanged), or Ready to Ship |
 
 - **One Ticket update box (since v1.17, like the core page):** day worked on, Start and End time (the Total in hours fills in by itself, e.g. 1.75 hrs), the update in rich text, parts cost, additional cost, an optional link (a OneDrive report, photos), and a **Status update** drop-down that moves the ticket on. Everything is optional, but something has to be filled in. The ticket shows the total time logged.
 - **Moving a ticket:** the Status update drop-down lists only the stages your role can move it to (it's the team whose turn it is); Admins also get "Admin: any stage", including reopening a closed ticket. Every move, update and edit goes in the ticket's work log with who and when; an update that also changes the stage is one entry.
 - **Shipping a repair:** choosing **Shipped** asks for the carrier (UPS, FedEx, USPS, DHL, Freight, Courier, Customer pickup, Hand delivered, Other) and the tracking number (not needed for pickup or hand delivery). Both are saved on the ticket with a link to the carrier's tracking page, and listed under **Recently shipped** on the Shipping queue for 14 days. Shipping, Sales and Admins can correct them under Ticket details.
+- **Partner (outsourced) repairs (since v1.20):** before approval, At Partner → **Eval Complete** brings the partner's evaluation back to Sales to quote. After approval the drop-down offers the ways back instead: **Returning from Partner** (coming back to the office; asks for the partner's carrier and tracking number) or **Shipped** (the partner ships straight to the customer). Sales or Shipping can make those moves. A second evaluation is still possible under "Additional eval / re-quote". Returning tickets are listed on the Shipping queue's **Inbound** tab; when one arrives Shipping moves it to Ready to Ship, or to In Repair if a tech should inspect it first (Ready to Ship can also go to In Repair for an inspection).
+- **Tracking at a glance:** a ticket with tracking shows it under the guide text, with links, and an **Edit tracking** link that jumps to the fields in Ticket details (corrections are saved with Save details and logged).
 - **Closing:** choosing **Closed** shows the resolution picker ("Work it out for me" by default). Since v1.19 **Shipping can close a Shipped ticket** as well as Admins, since they handle the last step; Recently shipped on the Shipping queue marks tickets that aren't closed yet. Admins can still add the invoice number after a ticket is closed.
 - **The queue** can be sorted by any column (click the header; click again to reverse). It opens longest-in-stage first and has a Received date column.
 - **On hold** stages don't turn yellow or red.

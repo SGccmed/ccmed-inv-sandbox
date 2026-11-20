@@ -839,6 +839,23 @@
               <strong>What happens now ({{r.stage}}):</strong> {{guide}}
             </div>
 
+            {# v1.20: tracking at a glance, with a link to correct it in Ticket details → Shipping #}
+            {% if r.tracking_number or r.inbound_tracking or r.carrier or r.inbound_carrier %}
+              <div class="panel" style="padding:12px 16px">
+                {% if r.inbound_carrier or r.inbound_tracking %}
+                  <div><strong>Back from partner:</strong> {{r.inbound_carrier or '—'}}
+                    {% if tracking_url(r.inbound_carrier, r.inbound_tracking) %}· <a href="{{ tracking_url(r.inbound_carrier, r.inbound_tracking) }}" target="_blank" rel="noopener">{{r.inbound_tracking}} ↗</a>{% elif r.inbound_tracking %}· {{r.inbound_tracking}}{% endif %}
+                    {% if r.inbound_shipped_at %}<span class="muted">· {{r.inbound_shipped_at|day}}</span>{% endif %}</div>
+                {% endif %}
+                {% if r.carrier or r.tracking_number %}
+                  <div><strong>Shipped to customer:</strong> {{r.carrier or '—'}}
+                    {% if tracking_url(r.carrier, r.tracking_number) %}· <a href="{{ tracking_url(r.carrier, r.tracking_number) }}" target="_blank" rel="noopener">{{r.tracking_number}} ↗</a>{% elif r.tracking_number %}· {{r.tracking_number}}{% endif %}
+                    {% if r.shipped_at %}<span class="muted">· {{r.shipped_at|day}}</span>{% endif %}</div>
+                {% endif %}
+                {% if can('repair_equipment_edit') %}<div class="hint"><a href="#{{ 'shipping-details' if (r.carrier or r.tracking_number) else 'partner-shipping' }}">Edit tracking ↓</a> (in Ticket details, then Save details)</div>{% endif %}
+              </div>
+            {% endif %}
+
             {# v1.17: one Ticket update box, like the core page. The Status update drop-down replaces the old
                "Move this ticket" buttons; it lists the stages this person may move the ticket to (Admins: any stage). #}
             {% if can('rma_edit') %}
@@ -895,9 +912,17 @@
                       <label>Status update</label>
                       <select name="status" data-status-pick>
                         <option value="">No change ({{r.stage}})</option>
-                        {% for s in moves %}
-                          <option value="{{s}}">→ {{s}}</option>
+                        {# v1.20: after approval, At Partner's main choices are the ways back; another evaluation is
+                           still possible but listed apart so a repaired unit doesn't loop back to Sales by mistake. #}
+                        {% set re_eval = r.stage == 'At Partner' and approved_before and 'Eval Complete' in moves %}
+                        {% for s in moves if not (re_eval and s == 'Eval Complete') %}
+                          <option value="{{s}}">→ {{ move_label(r.stage, s) }}</option>
                         {% endfor %}
+                        {% if re_eval %}
+                          <optgroup label="Additional eval / re-quote">
+                            <option value="Eval Complete">→ Eval Complete (partner found more work; Sales re-quotes)</option>
+                          </optgroup>
+                        {% endif %}
                         {% if all_moves %}
                           <optgroup label="Admin: any stage">
                             {% for s in all_moves if s not in moves %}
@@ -907,7 +932,8 @@
                         {% endif %}
                       </select>
                       <div class="hint">
-                        {% if moves %}Leave as is to keep the stage. It's {{r.team}}'s turn.
+                        {% if r.stage == 'At Partner' and approved_before %}Approved already: pick Returning from Partner or Shipped once the partner sends it. Only use Eval Complete if the partner found more work to quote.
+                        {% elif moves %}Leave as is to keep the stage. It's {{r.team}}'s turn.
                         {% elif r.stage=='Closed' %}This ticket is closed{% if all_moves %}; Admins can reopen it{% endif %}.
                         {% else %}It's {{r.team}}'s turn; your role can't change the stage from {{r.stage}}{% if all_moves %} except as Admin{% endif %}.{% endif %}
                       </div>
@@ -928,7 +954,7 @@
                       <input name="tracking_number" maxlength="100" autocomplete="off" placeholder="e.g. 1Z999AA10123456784">
                     </div>
                     <div class="field">
-                      <div class="hint" style="margin-top:24px">Saved on the ticket with a tracking link. Not needed for Customer pickup or Hand delivered.</div>
+                      <div class="hint ship-hint" style="margin-top:24px">Saved on the ticket with a tracking link. Not needed for Customer pickup or Hand delivered.</div>
                     </div>
                   </div>
                   <div class="field resolution-field" style="display:none;max-width:320px">
@@ -956,7 +982,10 @@
                     var carrier = form.querySelector('[data-carrier]'), tracking = form.querySelector('[name=tracking_number]');
                     var noTracking = {{ no_tracking|list|tojson }};
                     function refresh() {
-                      var shipped = pick.value === 'Shipped';
+                      var shipped = pick.value === 'Shipped' || pick.value === 'Returning from Partner';
+                      form.querySelector('.ship-hint').textContent = pick.value === 'Returning from Partner'
+                        ? "The partner's shipment back to the office. Saved on the ticket with a tracking link and listed on the Shipping queue's Inbound tab."
+                        : 'Saved on the ticket with a tracking link. Not needed for Customer pickup or Hand delivered.';
                       form.querySelector('.ship-fields').style.display = shipped ? '' : 'none';
                       form.querySelector('.resolution-field').style.display = pick.value === 'Closed' ? '' : 'none';
                       carrier.required = shipped;
@@ -1080,8 +1109,28 @@
                         {% endif %}
                       {% endif %}
 
+                      {% if r.inbound_carrier or r.inbound_tracking or r.stage in ('At Partner', 'Returning from Partner') %}
+                        <div class="section-title" id="partner-shipping">Back from partner</div>
+                        <div class="field">
+                          <label>Partner's carrier</label>
+                          <select name="inbound_carrier" {% if not can('repair_equipment_edit') %}disabled{% endif %}>
+                            <option value="">—</option>
+                            {% for x in carriers %}
+                              <option {% if x==r.inbound_carrier %}selected{% endif %}>{{x}}</option>
+                            {% endfor %}
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label>Partner's tracking number</label>
+                          <input name="inbound_tracking" value="{{r.inbound_tracking or ''}}" maxlength="100" {% if not can('repair_equipment_edit') %}readonly{% endif %}>
+                          {% if tracking_url(r.inbound_carrier, r.inbound_tracking) %}
+                            <div class="hint"><a href="{{ tracking_url(r.inbound_carrier, r.inbound_tracking) }}" target="_blank" rel="noopener">Track on {{r.inbound_carrier}} →</a></div>
+                          {% endif %}
+                        </div>
+                      {% endif %}
+
                       {% if r.carrier or r.tracking_number or r.stage in ('Ready to Ship', 'Shipped', 'Closed') %}
-                        <div class="section-title">Shipping</div>
+                        <div class="section-title" id="shipping-details">Shipping</div>
                         <div class="field">
                           <label>Carrier</label>
                           <select name="carrier" {% if not can('repair_equipment_edit') %}disabled{% endif %}>

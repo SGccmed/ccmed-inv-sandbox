@@ -3,13 +3,15 @@
 Until the Shipping rework (see claude/HANDOFF.md, roadmap), this page gathers what Shipping can already act on:
     Outbound   customer repairs in Ready to Ship, and those shipped in the last 14 days with carrier and tracking
                (v1.17); stock orders come with the sales work
-    Inbound    placeholder for expected arrivals and PO numbers; receiving is + New Inventory
+    Inbound    customer repairs Returning from Partner, with the partner's tracking (v1.20); expected stock arrivals
+               and PO numbers are still a placeholder; receiving is + New Inventory
     Loaners    stock items On loan or in Rental (real data); due dates and returns come with the loaner work
 Who sees it: permission shipping_view (SuperAdmin, Admin, Sales, Shipping).
 """
 from flask import request
 
 from auth import can, simple_page
+from repairs import days_since
 
 TABS = [('outbound', 'Outbound'), ('inbound', 'Inbound'), ('loaners', 'Loaners')]
 
@@ -20,7 +22,7 @@ the rest is a placeholder for the Shipping rework (request → pick by shelf →
 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
   {% for key, label in tabs %}
     <a href="/shipping?tab={{ key }}" style="padding:7px 13px;border-radius:8px;text-decoration:none;font-weight:600;
-      {% if key == tab %}background:#245d86;color:#ffffff{% else %}background:#e7f0f6;color:#245d86{% endif %}">{{ label }}{% if key == 'outbound' %} ({{ outbound|length }}){% elif key == 'loaners' %} ({{ loaners|length }}){% endif %}</a>
+      {% if key == tab %}background:#245d86;color:#ffffff{% else %}background:#e7f0f6;color:#245d86{% endif %}">{{ label }}{% if key == 'outbound' %} ({{ outbound|length }}){% elif key == 'inbound' %} ({{ inbound|length }}){% elif key == 'loaners' %} ({{ loaners|length }}){% endif %}</a>
   {% endfor %}
 </div>
 
@@ -63,6 +65,23 @@ the rest is a placeholder for the Shipping rework (request → pick by shelf →
   </div>
 {% elif tab == 'inbound' %}
   <div class="panel">
+    <h2 style="margin:0 0 6px;font-size:17px">Repairs returning from a partner</h2>
+    <p class="muted" style="margin:0 0 10px">On their way back to the office (v1.20). When one arrives, open the ticket and move it to
+      Ready to Ship, or to In Repair if a tech should inspect it first.</p>
+    <table>
+      <tr><th>Ticket</th><th>Customer</th><th>Equipment</th><th>Sent back</th><th>Carrier</th><th>Tracking</th><th>Days</th></tr>
+      {% for r in inbound %}
+        <tr><td><a href="/repairs/{{ r.id }}">{{ r.inventory_code or r.rma }}</a></td><td>{{ r.customer }}</td>
+          <td>{{ r.manufacturer or '' }} {{ r.model or '' }}{% if r.serial %} · S/N {{ r.serial }}{% endif %}</td>
+          <td>{{ r.inbound_shipped_at|day if r.inbound_shipped_at else r.stage_started_at|day }}</td><td>{{ r.inbound_carrier or '—' }}</td>
+          <td>{% if tracking_url(r.inbound_carrier, r.inbound_tracking) %}<a href="{{ tracking_url(r.inbound_carrier, r.inbound_tracking) }}" target="_blank" rel="noopener">{{ r.inbound_tracking }}</a>{% else %}{{ r.inbound_tracking or '—' }}{% endif %}</td>
+          <td>{{ r.days }}</td></tr>
+      {% else %}
+        <tr><td colspan="7" class="muted">No repairs are on their way back from a partner.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  <div class="panel">
     <h2 style="margin:0 0 6px;font-size:17px">Expected arrivals</h2>
     <p class="muted" style="margin:0 0 10px">Coming later: a list of what's on its way (new stock, loaners coming back, cores, customer repairs),
       tied to a PO or estimate, so receiving is a quick confirmation.</p>
@@ -96,6 +115,9 @@ def register_shipping_routes(app, conn):
         try:
             outbound = c.execute("""SELECT * FROM customer_repairs WHERE stage='Ready to Ship'
                                     ORDER BY stage_started_at, id""").fetchall()
+            # v1.20: repairs on their way back from a partner
+            inbound = [dict(r, days=days_since(r['stage_started_at'])) for r in c.execute(
+                """SELECT * FROM customer_repairs WHERE stage='Returning from Partner' ORDER BY stage_started_at, id""")]
             shipped = c.execute("""SELECT * FROM customer_repairs WHERE shipped_at IS NOT NULL
                                    AND shipped_at >= datetime('now', '-14 days') ORDER BY shipped_at DESC""").fetchall()
             loaners = c.execute("""SELECT u.*, (SELECT MAX(m.created_at) FROM movements m WHERE m.unit_id=u.id
@@ -103,4 +125,4 @@ def register_shipping_routes(app, conn):
                                    FROM units u WHERE u.status IN ('On loan','Rental') ORDER BY u.status, u.product_raw""").fetchall()
         finally:
             c.close()
-        return simple_page('Shipping queue', BODY, width=1150, tabs=TABS, tab=tab, outbound=outbound, shipped=shipped, loaners=loaners, can=can)
+        return simple_page('Shipping queue', BODY, width=1150, tabs=TABS, tab=tab, outbound=outbound, shipped=shipped, inbound=inbound, loaners=loaners, can=can)
