@@ -449,11 +449,11 @@ def register_client_routes(app, conn):
         # Repair ticket work log (repairs.py): receipts and stage moves show on the client timeline.
         for h in c.execute('''SELECT h.*, r.rma, r.inventory_code, r.model, r.manufacturer, r.id rid FROM repair_log h
                               JOIN customer_repairs r ON r.id=h.repair_id
-                              WHERE r.client_id=? AND h.kind IN ('created','stage')''', (cid,)):
+                              WHERE r.client_id=? AND (h.kind IN ('created','stage') OR (h.kind='update' AND h.new_stage IS NOT NULL))''', (cid,)):
             eq = f"{h['manufacturer'] or ''} {h['model'] or ''}".strip()
             ticket = h['inventory_code'] or h['rma']
             title = f"{ticket} received ({eq})" if h['kind'] == 'created' else f"{ticket}: {h['old_stage']} → {h['new_stage']}"
-            timeline.append({'cat': 'Repair', 'title': title, 'detail': h['text'] if h['kind'] == 'stage' else '', 'when': h['at'], 'actor': h['actor'] or '', 'url': f"/repairs/{h['rid']}"})
+            timeline.append({'cat': 'Repair', 'title': title, 'detail': h['text'] if h['kind'] in ('stage', 'update') else '', 'when': h['at'], 'actor': h['actor'] or '', 'url': f"/repairs/{h['rid']}"})
         timeline.sort(key=lambda e: e['when'] or '', reverse=True)
         done = [r for r in repairs if r['completed_at']]
         avg = None

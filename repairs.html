@@ -731,7 +731,7 @@
               team's queue. Units arriving with other stock can also be received through + New Inventory (type RP).
             </div>
             <div class="panel">
-              <form method="post">
+              <form method="post" data-unsaved>
                 <div class="fields">
                   <div class="field">
                     <label>Customer *</label>
@@ -839,54 +839,11 @@
               <strong>What happens now ({{r.stage}}):</strong> {{guide}}
             </div>
 
-            {% if moves or all_moves %}
-              <div class="panel">
-                <h2>Move this ticket</h2>
-                <form method="post" action="/repairs/{{r.id}}/move">
-                  <div class="field" style="margin-bottom:12px">
-                    <input name="note" placeholder="Optional note for the work log, e.g. why it's moving or what you're waiting on">
-                  </div>
-                  {% if r.stage in ('Shipped', 'Unrepairable') and 'Closed' in moves %}
-                    <div class="field" style="margin-bottom:12px;max-width:320px">
-                      <label>Resolution when closing</label>
-                      <select name="resolution">
-                        <option value="">Work it out for me</option>
-                        {% for x in resolutions %}
-                          <option>{{x}}</option>
-                        {% endfor %}
-                      </select>
-                      <div class="hint">Left blank: Warranty if ticked, Exchanged from Unrepairable, otherwise Repaired.</div>
-                    </div>
-                  {% endif %}
-                  <div class="moves">
-                    {% for s in moves %}
-                      <button name="stage" value="{{s}}">→ {{s}}</button>
-                    {% endfor %}
-                  </div>
-                </form>
-                {% if all_moves %}
-                  <form method="post" action="/repairs/{{r.id}}/move" class="moves" style="margin-top:14px">
-                    <select name="stage" style="max-width:260px" required>
-                      <option value="">Admin: move to any stage…</option>
-                      {% for s in all_moves %}
-                        <option>{{s}}</option>
-                      {% endfor %}
-                    </select>
-                    <input name="note" placeholder="Reason (logged)" style="max-width:320px">
-                    <button class="secondary">Move</button>
-                  </form>
-                  <div class="hint">Admins can skip steps or reopen a closed ticket. Every move is logged.</div>
-                {% endif %}
-              </div>
-            {% else %}
-              <div class="hint" style="margin-bottom:20px">
-                {% if r.stage=='Closed' %}This ticket is closed.{% else %}It's {{r.team}}'s turn; your role can't move it from {{r.stage}}.{% endif %}
-              </div>
-            {% endif %}
-
+            {# v1.17: one Ticket update box, like the core page. The Status update drop-down replaces the old
+               "Move this ticket" buttons; it lists the stages this person may move the ticket to (Admins: any stage). #}
             {% if can('rma_edit') %}
-              <div class="panel">
-                <form method="post" action="/repairs/{{r.id}}/note" class="update-form">
+              <div class="panel" id="update">
+                <form method="post" action="/repairs/{{r.id}}/note" class="update-form" data-unsaved>
                   <div class="who">Ticket update — <span class="signer">{{me}}</span></div>
                   <div class="row-time">
                     <div class="field">
@@ -922,7 +879,7 @@
                   </div>
                   <div class="field">
                     <label>Ticket update</label>
-                    <textarea name="note" data-rich placeholder="What you checked, found or replaced; a call with the customer; a part ordered; carrier and tracking number; partner and their RMA. Ctrl+B for bold."></textarea>
+                    <textarea name="note" data-rich placeholder="What you checked, found or replaced; a call with the customer; a part ordered; partner and their RMA. Ctrl+B for bold."></textarea>
                   </div>
                   <div class="row3b">
                     <div class="field">
@@ -935,14 +892,82 @@
                       <div class="hint">Shipping, outside service, etc.</div>
                     </div>
                     <div class="field">
-                      <div class="hint" style="margin-top:24px">Time and costs are optional. To change the stage, use <strong>Move this ticket</strong> above.</div>
+                      <label>Status update</label>
+                      <select name="status" data-status-pick>
+                        <option value="">No change ({{r.stage}})</option>
+                        {% for s in moves %}
+                          <option value="{{s}}">→ {{s}}</option>
+                        {% endfor %}
+                        {% if all_moves %}
+                          <optgroup label="Admin: any stage">
+                            {% for s in all_moves if s not in moves %}
+                              <option value="{{s}}">{{s}}</option>
+                            {% endfor %}
+                          </optgroup>
+                        {% endif %}
+                      </select>
+                      <div class="hint">
+                        {% if moves %}Leave as is to keep the stage. It's {{r.team}}'s turn.
+                        {% elif r.stage=='Closed' %}This ticket is closed{% if all_moves %}; Admins can reopen it{% endif %}.
+                        {% else %}It's {{r.team}}'s turn; your role can't change the stage from {{r.stage}}{% if all_moves %} except as Admin{% endif %}.{% endif %}
+                      </div>
                     </div>
+                  </div>
+                  <div class="row3b ship-fields" style="display:none">
+                    <div class="field">
+                      <label>Carrier *</label>
+                      <select name="carrier" data-carrier>
+                        <option value="">Pick the carrier…</option>
+                        {% for x in carriers %}
+                          <option>{{x}}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label>Tracking number <span class="tracking-star">*</span></label>
+                      <input name="tracking_number" maxlength="100" autocomplete="off" placeholder="e.g. 1Z999AA10123456784">
+                    </div>
+                    <div class="field">
+                      <div class="hint" style="margin-top:24px">Saved on the ticket with a tracking link. Not needed for Customer pickup or Hand delivered.</div>
+                    </div>
+                  </div>
+                  <div class="field resolution-field" style="display:none;max-width:320px">
+                    <label>Resolution when closing</label>
+                    <select name="resolution">
+                      <option value="">Work it out for me</option>
+                      {% for x in resolutions %}
+                        <option>{{x}}</option>
+                      {% endfor %}
+                    </select>
+                    <div class="hint">Left blank: Warranty if ticked, Exchanged from Unrepairable, otherwise Repaired.</div>
+                  </div>
+                  <div class="field">
+                    <label>Link (optional)</label>
+                    <input name="link" type="url" maxlength="500" placeholder="https://… a OneDrive report, photos or a partner's page">
                   </div>
                   <div class="sign">
                     <span class="name">— <span class="signer">{{me}}</span></span>
                     <button>Submit Update</button>
                   </div>
                 </form>
+                <script>
+                  (function () {
+                    var form = document.querySelector('#update form'), pick = form.querySelector('[data-status-pick]');
+                    var carrier = form.querySelector('[data-carrier]'), tracking = form.querySelector('[name=tracking_number]');
+                    var noTracking = {{ no_tracking|list|tojson }};
+                    function refresh() {
+                      var shipped = pick.value === 'Shipped';
+                      form.querySelector('.ship-fields').style.display = shipped ? '' : 'none';
+                      form.querySelector('.resolution-field').style.display = pick.value === 'Closed' ? '' : 'none';
+                      carrier.required = shipped;
+                      tracking.required = shipped && noTracking.indexOf(carrier.value) < 0;
+                      form.querySelector('.tracking-star').style.display = tracking.required ? '' : 'none';
+                    }
+                    pick.addEventListener('change', refresh);
+                    carrier.addEventListener('change', refresh);
+                    refresh();
+                  })();
+                </script>
               </div>
             {% endif %}
 
@@ -1055,6 +1080,31 @@
                         {% endif %}
                       {% endif %}
 
+                      {% if r.carrier or r.tracking_number or r.stage in ('Ready to Ship', 'Shipped', 'Closed') %}
+                        <div class="section-title">Shipping</div>
+                        <div class="field">
+                          <label>Carrier</label>
+                          <select name="carrier" {% if not can('repair_equipment_edit') %}disabled{% endif %}>
+                            <option value="">—</option>
+                            {% for x in carriers %}
+                              <option {% if x==r.carrier %}selected{% endif %}>{{x}}</option>
+                            {% endfor %}
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label>Tracking number</label>
+                          <input name="tracking_number" value="{{r.tracking_number or ''}}" maxlength="100" {% if not can('repair_equipment_edit') %}readonly{% endif %}>
+                          {% if tracking_url(r.carrier, r.tracking_number) %}
+                            <div class="hint"><a href="{{ tracking_url(r.carrier, r.tracking_number) }}" target="_blank" rel="noopener">Track on {{r.carrier}} →</a></div>
+                          {% endif %}
+                        </div>
+                        <div class="field">
+                          <label>Shipped</label>
+                          <div class="text">{{r.shipped_at|daytime if r.shipped_at else 'Not yet'}}</div>
+                          <div class="hint">Filled in when the ticket moves to Shipped.</div>
+                        </div>
+                      {% endif %}
+
                       <div class="section-title">Intake notes</div>
                       <div class="field wide">
                         <div class="text">{{r.notes|rich if r.notes else '—'}}</div>
@@ -1080,10 +1130,11 @@
                         </div>
                         <div>
                           <span class="kind">{{e.kind}}</span>
-                          {% if e.kind=='stage' %}<strong>{{e.old_stage}} → {{e.new_stage}}</strong>
+                          {% if e.kind=='stage' or e.new_stage %}<strong>{{e.old_stage}} → {{e.new_stage}}</strong>
                           {% elif e.kind=='created' %}<strong>Received</strong>{% endif %}
                         </div>
                         {% if e.text %}<div class="text">{{e.text|rich}}</div>{% endif %}
+                        {% if e.link %}<div class="text"><a href="{{e.link}}" target="_blank" rel="noopener noreferrer">Open link ↗</a></div>{% endif %}
                         {% if e.parts_cost or e.other_cost %}
                           <div class="costs">
                             {% if can('view_cost') %}

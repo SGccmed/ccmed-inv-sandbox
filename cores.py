@@ -11,7 +11,7 @@ from pathlib import Path
 from flask import abort, flash, g, redirect, render_template_string, request, url_for
 
 from auth import ADMIN_ROLES, add_user_block, can, roles_of
-from formatting import clean_note, order_by, today_pacific, work_hours
+from formatting import clean_link, clean_note, order_by, today_pacific, work_hours
 import costs
 
 # Status: on hold or not (on-hold statuses don't age), and what to do next.
@@ -34,7 +34,8 @@ OLD_STAGES = {'QC': 'In Repair'}                                 # before v1.07
 
 CORE_COLUMNS = [('stage_started_at', 'TEXT')]
 UPDATE_COLUMNS = [('work_date', 'TEXT'), ('work_time', 'TEXT'), ('actor', 'TEXT'), ('old_stage', 'TEXT'), ('new_stage', 'TEXT'),
-                  ('work_start', 'TEXT'), ('work_end', 'TEXT'), ('hours', 'REAL')]   # v1.09: start/end/total time
+                  ('work_start', 'TEXT'), ('work_end', 'TEXT'), ('hours', 'REAL'),   # v1.09: start/end/total time
+                ('link', 'TEXT')]                                                   # v1.17: optional link (report, photos)
 
 
 def now_iso():
@@ -168,10 +169,11 @@ def register_core_routes(app, conn, base_dir, inventory_code_maker, norm):
         try:
             parts = money(f.get('parts'), 'Parts cost')
             other = money(f.get('other'), 'Additional cost')
+            link = clean_link(f.get('link'))
             work_date = f.get('work_date', '').strip() or today_pacific().isoformat()
             date.fromisoformat(work_date)
         except ValueError as e:
-            c.close(); flash(str(e) if 'cost' in str(e) else 'Enter a valid day worked on.'); return back
+            c.close(); flash(str(e) if ('cost' in str(e) or 'Link' in str(e)) else 'Enter a valid day worked on.'); return back
         start, end = f.get('work_start', '').strip(), f.get('work_end', '').strip()
         hrs, problem = work_hours(start, end)
         if problem:
@@ -181,8 +183,8 @@ def register_core_routes(app, conn, base_dir, inventory_code_maker, norm):
         if status not in WORK_STAGES:
             status = core['stage']
         changed = status != core['stage']
-        if not (body or parts or other or changed or hrs):
-            c.close(); flash('Write what you did, add a cost, or change the status before submitting.'); return back
+        if not (body or parts or other or changed or hrs or link):
+            c.close(); flash('Write what you did, add a cost or a link, or change the status before submitting.'); return back
         # Who did the work: the signed-in tech, or (Admins only) someone picked from the list.
         actor, name = g.user['username'], me_name()
         pick = f.get('technician', '').strip()
@@ -193,11 +195,11 @@ def register_core_routes(app, conn, base_dir, inventory_code_maker, norm):
         now = now_iso()
         c.execute("""INSERT INTO core_transactions(core_id, performed_at, technician, description, labor_method, labor_hours,
                      labor_rate, labor_cost, parts_cost, other_cost, work_date, work_time, actor, old_stage, new_stage,
-                     work_start, work_end, hours)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                     work_start, work_end, hours, link)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                   (cid, now, name, body, 'none', 0, 0, 0, parts, other, work_date, start if hrs else '', actor,
                    core['stage'] if changed else None, status if changed else None,
-                   start if hrs else None, end if hrs else None, hrs))
+                   start if hrs else None, end if hrs else None, hrs, link))
         if changed:
             c.execute('UPDATE core_items SET stage=?, stage_started_at=? WHERE id=?', (status, now, cid))
             if status == 'Ready for Stock':      # this update is the QC sign-off

@@ -191,7 +191,7 @@
             Serial numbers are checked as you type; a match is only a warning, since different manufacturers
               can share serials.
           </div>
-          <form method="post" id="entryform">
+          <form method="post" id="entryform" data-unsaved>
             {# rows_back: the rows sent back when something needs fixing (nothing is lost); otherwise one empty row #}
             <div id="rows">
               {% for r in rows_back or [{}] %}

@@ -13,7 +13,7 @@ from flask import flash, g, redirect, render_template_string, request, url_for
 
 from auth import ADMIN_ROLES, add_user_block, can, roles_of
 from clients import client_label, resolve_client, serial_matches
-from formatting import clean_note, today_pacific, work_hours
+from formatting import clean_link, clean_note, today_pacific, work_hours
 import costs
 import choices
 
@@ -173,10 +173,33 @@ NEW_COLUMNS = [
     ('resolution', 'TEXT'),
     ('inventory_code', 'TEXT'),
     ('client_id', 'INTEGER'),
+    ('carrier', 'TEXT'),            # v1.17: how it went back (CARRIERS), the tracking number and when
+    ('tracking_number', 'TEXT'),
+    ('shipped_at', 'TEXT'),
 ]
 # v1.09: a work-log entry can be a "ticket update" with the day worked, start/end time and costs.
 LOG_COLUMNS = [('work_date', 'TEXT'), ('work_start', 'TEXT'), ('work_end', 'TEXT'), ('hours', 'REAL'),
-               ('parts_cost', 'REAL'), ('other_cost', 'REAL')]
+               ('parts_cost', 'REAL'), ('other_cost', 'REAL'),
+               ('link', 'TEXT')]   # v1.17: an optional link on a ticket update (OneDrive report, photos)
+
+# v1.17: carrier and tracking number when a ticket moves to Shipped.
+CARRIERS = ['UPS', 'FedEx', 'USPS', 'DHL', 'Freight', 'Courier', 'Customer pickup', 'Hand delivered', 'Other']
+NO_TRACKING = {'Customer pickup', 'Hand delivered'}
+TRACKING_URLS = {
+    'UPS': 'https://www.ups.com/track?tracknum={}',
+    'FedEx': 'https://www.fedex.com/fedextrack/?trknbr={}',
+    'USPS': 'https://tools.usps.com/go/TrackConfirmAction?tLabels={}',
+    'DHL': 'https://www.dhl.com/us-en/home/tracking/tracking-express.html?submit=1&tracking-id={}',
+}
+
+
+def tracking_url(carrier, number):
+    """The carrier's public tracking page for a number, or '' if we don't know one."""
+    from urllib.parse import quote
+    pattern = TRACKING_URLS.get(carrier or '')
+    return pattern.format(quote((number or '').strip())) if pattern and (number or '').strip() else ''
+
+
 
 
 def now_iso():
@@ -354,7 +377,7 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
     def render(**ctx):
         ctx.setdefault('fv', {})          # values typed into the new-ticket form (kept when it's sent back)
         return render_template_string(template, stages=STAGES, stage_names=STAGE_NAMES, open_stages=OPEN_STAGES,
-                                      teams=TEAMS, resolutions=RESOLUTIONS, **ctx)
+                                      teams=TEAMS, resolutions=RESOLUTIONS, carriers=CARRIERS, no_tracking=NO_TRACKING, **ctx)
 
     def user_names(c):
         return {r['username']: (r['full_name'] or r['username']) for r in c.execute('SELECT username, full_name FROM users')}
@@ -368,7 +391,7 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
                 return tech_list(c)
             finally:
                 c.close()
-        return {'tech_options': tech_options}
+        return {'tech_options': tech_options, 'tracking_url': tracking_url}
 
     # ----- Queue (list) -----
     @app.route('/repairs')
@@ -582,6 +605,14 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
                 changes['customer'] = client['name']; changes['client_id'] = client['id']
             if 'rma' in f and text('rma'):
                 changes['rma'] = text('rma')
+        if can('repair_equipment_edit'):
+            if 'carrier' in f:
+                carrier = text('carrier')
+                if carrier and carrier not in CARRIERS:
+                    c.close(); flash('Pick the carrier from the list.'); return redirect(url_for('repair_detail', rid=rid))
+                changes['carrier'] = carrier or None
+            if 'tracking_number' in f:
+                changes['tracking_number'] = text('tracking_number')[:100] or None
         if can('repair_assign') and 'assigned_to' in f:
             changes['assigned_to'] = text('assigned_to') or None
         if can('repair_eval') and 'eval_findings' in f:
@@ -619,7 +650,11 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
         c.close()
         return redirect(url_for('repair_detail', rid=rid))
 
-    # ----- Ticket update (work log entry with time and costs) -----
+    # ----- Ticket update (v1.17: the one form on a ticket, like the core one) -----
+    # A ticket update can hold the work done (day, start/end, text, parts, additional cost, a link) and a status
+    # change from the Status update drop-down. Moving to Shipped asks for the carrier and tracking number. The
+    # stage rules are the same as before (allowed_moves; Admins can pick any stage). An update that only changes
+    # the stage is logged as a plain stage move; otherwise one work-log entry carries both.
     @app.post('/repairs/<int:rid>/note')
     def repair_note(rid):
         back = redirect(url_for('repair_detail', rid=rid))
@@ -630,6 +665,7 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
         try:
             parts = amount(f.get('parts'), 'Parts cost') or 0
             other = amount(f.get('other'), 'Additional cost') or 0
+            link = clean_link(f.get('link'))
         except ValueError as e:
             flash(str(e)); return back
         work_date = f.get('work_date', '').strip() or today_pacific().isoformat()
@@ -641,11 +677,28 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
         hrs, problem = work_hours(start, end)
         if problem:
             flash(problem); return back
-        if not (body or parts or other or hrs):
-            flash('Write the update, add a time or a cost before submitting.'); return back
         c = conn()
-        if c.execute('SELECT 1 FROM customer_repairs WHERE id=?', (rid,)).fetchone() is None:
+        r = c.execute('SELECT * FROM customer_repairs WHERE id=?', (rid,)).fetchone()
+        if r is None:
             c.close(); return 'Repair ticket not found', 404
+        target = f.get('status', '').strip()
+        if target == r['stage']:
+            target = ''
+        if target:
+            if target not in STAGES:
+                c.close(); flash('Pick a status from the list.'); return back
+            if target not in allowed_moves(r) and not is_admin():
+                c.close(); flash(f"Your role can't move this ticket from {r['stage']} to {target}."); return back
+        ship = {}
+        if target == 'Shipped':
+            carrier, tracking = f.get('carrier', '').strip(), f.get('tracking_number', '').strip()
+            if carrier not in CARRIERS:
+                c.close(); flash('Pick the carrier it shipped with.'); return back
+            if carrier not in NO_TRACKING and not tracking:
+                c.close(); flash('Enter the tracking number (or pick Customer pickup / Hand delivered).'); return back
+            ship = {'carrier': carrier, 'tracking_number': tracking[:100] or None}
+        if not (body or parts or other or hrs or link or target):
+            c.close(); flash('Write the update, add a time, a cost or a link, or change the status before submitting.'); return back
         # Who did the work: the signed-in person, or (Admins only) a technician picked from the list.
         actor = g.user['username']
         pick = f.get('technician', '').strip()
@@ -653,13 +706,26 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
             if c.execute('SELECT 1 FROM users WHERE username=?', (pick,)).fetchone():
                 actor = pick
         now = now_iso()
-        c.execute("""INSERT INTO repair_log(repair_id, at, actor, kind, text, work_date, work_start, work_end, hours, parts_cost, other_cost)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-                  (rid, now, actor, 'update', body, work_date, start if hrs else None, end if hrs else None, hrs,
-                   parts or None, other or None))
+        ship_line = ''
+        if ship:
+            c.execute('UPDATE customer_repairs SET carrier=?, tracking_number=?, shipped_at=? WHERE id=?',
+                      (ship['carrier'], ship['tracking_number'], now, rid))
+            ship_line = f"Shipped by {ship['carrier']}" + (f", tracking {ship['tracking_number']}" if ship['tracking_number'] else '')
+        only_move = target and not (body or parts or other or hrs or link)
+        if target:
+            move_ticket(c, r, target, ship_line, f.get('resolution', ''), when=now, log_it=bool(only_move))
+        if not only_move:
+            text = body
+            if ship_line:
+                text = f'<div>{ship_line}</div>' + (body or '')
+            c.execute("""INSERT INTO repair_log(repair_id, at, actor, kind, text, work_date, work_start, work_end, hours,
+                         parts_cost, other_cost, link, old_stage, new_stage)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                      (rid, now, actor, 'update', text, work_date, start if hrs else None, end if hrs else None, hrs,
+                       parts or None, other or None, link, r['stage'] if target else None, target or None))
         c.execute('UPDATE customer_repairs SET updated_at=? WHERE id=?', (now, rid))
         c.commit(); c.close()
-        flash('Update posted')
+        flash(('Update posted' if not only_move else 'Status changed') + (f' · now {target}' if target else ''))
         return back
 
 
@@ -670,7 +736,7 @@ LABELS = {'manufacturer': 'manufacturer', 'model': 'model', 'part_number': 'part
           'location': 'location', 'customer': 'client', 'rma': 'RMA', 'assigned_to': 'assigned tech',
           'eval_findings': 'eval findings', 'quoted_price': 'quoted price', 'estimate_number': 'estimate number',
           'invoice_number': 'invoice number', 'warranty': 'warranty', 'warranty_of_id': 'warranty link',
-          'resolution': 'resolution'}
+          'resolution': 'resolution', 'carrier': 'carrier', 'tracking_number': 'tracking number'}
 QUIET = {'eval_findings', 'quoted_price', 'client_id', 'warranty_of_id'}   # logged without values
 
 
@@ -704,8 +770,9 @@ def create_ticket(c, client, rma, received, fields, assigned_to='', note='Ticket
     return rid
 
 
-def move_ticket(c, r, target, note='', resolution='', when=None):
-    """Move a ticket to a new stage, set its resolution when it ends, and log it."""
+def move_ticket(c, r, target, note='', resolution='', when=None, log_it=True):
+    """Move a ticket to a new stage, set its resolution when it ends, and log it (log_it=False when the caller
+    records the move on its own ticket update, v1.17)."""
     when = when or now_iso()
     sets = {'stage': target, 'stage_started_at': when, 'updated_at': when}
     if target == 'Declined':
@@ -724,4 +791,5 @@ def move_ticket(c, r, target, note='', resolution='', when=None):
         sets['completed_at'] = None
         sets['resolution'] = None
     c.execute('UPDATE customer_repairs SET ' + ', '.join(f'{k}=?' for k in sets) + ' WHERE id=?', [*sets.values(), r['id']])
-    log(c, r['id'], 'stage', note, old_stage=r['stage'], new_stage=target, when=when)
+    if log_it:
+        log(c, r['id'], 'stage', note, old_stage=r['stage'], new_stage=target, when=when)

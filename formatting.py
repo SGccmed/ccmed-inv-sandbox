@@ -212,3 +212,13 @@ def register_formatting(app):
     app.jinja_env.filters['editor_value'] = editor_value
     app.jinja_env.filters['hours'] = hours
     app.jinja_env.globals['sort_header'] = sort_header
+
+
+def clean_link(text):
+    """A web link typed on a ticket update (v1.17): http(s) only, or ValueError. Blank -> None."""
+    text = (text or '').strip()
+    if not text:
+        return None
+    if not re.match(r'^https?://[^\s<>"]+$', text, re.I) or len(text) > 500:
+        raise ValueError('Links must start with https:// (for example a OneDrive share link).')
+    return text

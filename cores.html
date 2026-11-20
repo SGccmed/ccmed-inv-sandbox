@@ -769,7 +769,7 @@
 
               {% if can('core_work') %}
                 <div class="panel">
-                  <form method="post" action="/cores/{{detail.id}}/update" class="update-form">
+                  <form method="post" action="/cores/{{detail.id}}/update" class="update-form" data-unsaved>
                     <div class="who">Ticket update — <span class="signer">{{me}}</span></div>
                     <div class="row-time">
                       <div class="field">
@@ -827,6 +827,10 @@
                         <div class="hint">Leave as is to keep the current status. Ready for Stock = fixed and tested.</div>
                       </div>
                     </div>
+                    <div class="field">
+                      <label>Link (optional)</label>
+                      <input name="link" type="url" maxlength="500" placeholder="https://… a OneDrive report, photos or a supplier's page">
+                    </div>
                     <div class="sign">
                       <span class="name">— <span class="signer">{{me}}</span></span>
                       <button>Submit Update</button>
@@ -880,6 +884,7 @@
                       {% if u.new_stage %} · <span class="pill">{{u.old_stage}} → {{u.new_stage}}</span>{% endif %}
                     </div>
                     {% if u.description %}<div class="body">{{u.description|rich}}</div>{% endif %}
+                    {% if u.link %}<div class="body"><a href="{{u.link}}" target="_blank" rel="noopener noreferrer">Open link ↗</a></div>{% endif %}
                     {% if u.parts_cost or u.other_cost or u.labor_cost %}
                       <div class="costs">
                         {% if can('view_cost') %}

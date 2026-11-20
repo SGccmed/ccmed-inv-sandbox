@@ -104,8 +104,10 @@ Each customer repair is a ticket with one owner at each stage, like an IT helpde
 | Declined | Sales | Ready to Ship (returned free) |
 | Unrepairable | Sales | Closed (exchanged), or Ready to Ship |
 
-- **Moving a ticket:** only the team whose turn it is can move it on; Admins can move any ticket anywhere. Every move, update and edit goes in the ticket's work log with who and when.
-- **Ticket updates:** day worked on, Start and End time (the Total in hours fills in by itself, e.g. 1.75 hrs), the update in rich text, parts cost and additional cost. All except the text are optional. The ticket shows the total time logged.
+- **One Ticket update box (since v1.17, like the core page):** day worked on, Start and End time (the Total in hours fills in by itself, e.g. 1.75 hrs), the update in rich text, parts cost, additional cost, an optional link (a OneDrive report, photos), and a **Status update** drop-down that moves the ticket on. Everything is optional, but something has to be filled in. The ticket shows the total time logged.
+- **Moving a ticket:** the Status update drop-down lists only the stages your role can move it to (it's the team whose turn it is); Admins also get "Admin: any stage", including reopening a closed ticket. Every move, update and edit goes in the ticket's work log with who and when; an update that also changes the stage is one entry.
+- **Shipping a repair:** choosing **Shipped** asks for the carrier (UPS, FedEx, USPS, DHL, Freight, Courier, Customer pickup, Hand delivered, Other) and the tracking number (not needed for pickup or hand delivery). Both are saved on the ticket with a link to the carrier's tracking page, and listed under **Recently shipped** on the Shipping queue for 14 days. Shipping, Sales and Admins can correct them under Ticket details.
+- **Closing:** choosing **Closed** shows the resolution picker ("Work it out for me" by default).
 - **The queue** can be sorted by any column (click the header; click again to reverse). It opens longest-in-stage first and has a Received date column.
 - **On hold** stages don't turn yellow or red.
 - **RMA numbers** are created automatically (RMA-10001, ...) if left blank; the field can also hold a partner's RMA.
@@ -155,6 +157,8 @@ Every customer, location, manufacturer and model field is a type-to-search drop-
 - **Rich text:** every note and description box (ticket updates, repair intake notes, eval findings, customer notes and activity, product descriptions and requests) is a rich text editor. Ctrl+B / Ctrl+I work, and numbered or bulleted lists continue when you press Enter. Notes are stored as HTML and cleaned of anything unsafe every time they're shown. Older plain-text notes still display normally.
 - **Adjusting a cost (Admin, SuperAdmin):** a stock item's cost, a core's purchase cost, the parts or additional cost on one core update, and a repair's quoted price can each be corrected on the record's page. A reason is required; the old and new amounts, who and when are kept with the cost. On a stock item it's one **Cost** box: the current cost, every change, and (for Admins) the Adjust form. Sales sees the box without the form; technicians and Shipping don't see it. A converted core is adjusted through its stock item.
 - **Sorting:** the stock list, repair queue and core list sort by clicking a column header.
+- **Unsaved changes:** ticket updates (repairs and cores), + New Inventory and the new repair ticket form ask before you leave the page with something typed in them.
+- **Search shortcut:** press **/** on any page to jump to the search box.
 - **Costs:** a negative or non-numeric cost turns the field red with a warning and greys out the form's submit button until it's fixed. The server also refuses negative costs.
 
 ## Dates

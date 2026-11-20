@@ -59,7 +59,7 @@
   }
 </style>
 <form class="gsearch" action="/search" method="get" autocomplete="off">
-  <input name="q" type="search" placeholder="Search customers, tickets, serials…" aria-label="Search everything"
+  <input name="q" type="search" placeholder="Search customers, tickets, serials…" title="Tip: press / on any page to jump here" aria-label="Search everything"
     oninput="gsSuggest(this)" onkeydown="gsKey(event, this)" onblur="setTimeout(function () { gsHide() }, 200)">
   <div class="gs-list"></div>
 </form>

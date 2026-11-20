@@ -1,7 +1,8 @@
 """Shipping queue (v1.16 placeholder): /shipping, under the Shipping (truck) group in the sidebar.
 
 Until the Shipping rework (see claude/HANDOFF.md, roadmap), this page gathers what Shipping can already act on:
-    Outbound   customer repairs in Ready to Ship (real data); stock orders come with the sales work
+    Outbound   customer repairs in Ready to Ship, and those shipped in the last 14 days with carrier and tracking
+               (v1.17); stock orders come with the sales work
     Inbound    placeholder for expected arrivals and PO numbers; receiving is + New Inventory
     Loaners    stock items On loan or in Rental (real data); due dates and returns come with the loaner work
 Who sees it: permission shipping_view (SuperAdmin, Admin, Sales, Shipping).
@@ -36,6 +37,20 @@ the rest is a placeholder for the Shipping rework (request → pick by shelf →
           <td>{{ r.stage_started_at|day }}</td></tr>
       {% else %}
         <tr><td colspan="6" class="muted">Nothing is waiting to ship.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  <div class="panel">
+    <h2 style="margin:0 0 6px;font-size:17px">Recently shipped</h2>
+    <p class="muted" style="margin:0 0 10px">Customer repairs shipped in the last 14 days, with their tracking (v1.17).</p>
+    <table>
+      <tr><th>Ticket</th><th>Customer</th><th>Equipment</th><th>Shipped</th><th>Carrier</th><th>Tracking</th></tr>
+      {% for r in shipped %}
+        <tr><td><a href="/repairs/{{ r.id }}">{{ r.inventory_code or r.rma }}</a></td><td>{{ r.customer }}</td>
+          <td>{{ r.manufacturer or '' }} {{ r.model or '' }}</td><td>{{ r.shipped_at|day }}</td><td>{{ r.carrier or '—' }}</td>
+          <td>{% if tracking_url(r.carrier, r.tracking_number) %}<a href="{{ tracking_url(r.carrier, r.tracking_number) }}" target="_blank" rel="noopener">{{ r.tracking_number }}</a>{% else %}{{ r.tracking_number or '—' }}{% endif %}</td></tr>
+      {% else %}
+        <tr><td colspan="6" class="muted">Nothing shipped in the last 14 days.</td></tr>
       {% endfor %}
     </table>
   </div>
@@ -79,9 +94,11 @@ def register_shipping_routes(app, conn):
         try:
             outbound = c.execute("""SELECT * FROM customer_repairs WHERE stage='Ready to Ship'
                                     ORDER BY stage_started_at, id""").fetchall()
+            shipped = c.execute("""SELECT * FROM customer_repairs WHERE shipped_at IS NOT NULL
+                                   AND shipped_at >= datetime('now', '-14 days') ORDER BY shipped_at DESC""").fetchall()
             loaners = c.execute("""SELECT u.*, (SELECT MAX(m.created_at) FROM movements m WHERE m.unit_id=u.id
                                     AND m.new_location IN ('Loan','Rental')) moved
                                    FROM units u WHERE u.status IN ('On loan','Rental') ORDER BY u.status, u.product_raw""").fetchall()
         finally:
             c.close()
-        return simple_page('Shipping queue', BODY, width=1150, tabs=TABS, tab=tab, outbound=outbound, loaners=loaners, can=can)
+        return simple_page('Shipping queue', BODY, width=1150, tabs=TABS, tab=tab, outbound=outbound, shipped=shipped, loaners=loaners, can=can)

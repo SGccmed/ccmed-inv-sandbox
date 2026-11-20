@@ -59,6 +59,10 @@
     border-color: #f0d49b;
     color: #7a5600
   }
+  .time-bad {
+    color: #b3261e !important;
+    font-weight: 600
+  }
   .time-total {
     font-weight: 700;
     padding: 10px 0
@@ -640,15 +644,49 @@
       var out = form.querySelector('[data-time-total]');
       if (!start || !end || !out) return;
       var a = start.value.split(':'), b = end.value.split(':');
-      if (!start.value || !end.value) { out.textContent = '—'; out.style.color = ''; return; }
+      out.classList.remove('time-bad');
+      if (!start.value || !end.value) { out.textContent = '—'; return; }
       var mins = (+b[0] * 60 + +b[1]) - (+a[0] * 60 + +a[1]);
-      if (mins <= 0) { out.textContent = 'End must be after start'; out.style.color = '#b3261e'; return; }
-      out.textContent = (mins / 60).toFixed(2) + ' hrs'; out.style.color = '';
+      if (mins <= 0) { out.textContent = 'End must be after start'; out.classList.add('time-bad'); return; }
+      out.textContent = (mins / 60).toFixed(2) + ' hrs';
     }
     ['input', 'change'].forEach(function (type) {
       document.addEventListener(type, function (e) {
         if (e.target.matches && e.target.matches('[data-time]') && e.target.form) updateTotals(e.target.form);
       });
+    });
+
+    // ---- Unsaved changes (v1.17) ----
+    // A form marked data-unsaved (ticket updates, + New Inventory, new repair ticket) asks before the page is left
+    // with something typed in it. Saving the form clears the warning.
+    function markDirty(e) {
+      var form = e.target.closest && e.target.closest('form[data-unsaved]');
+      if (form) form.dataset.dirty = '1';
+    }
+    document.addEventListener('input', markDirty);
+    document.addEventListener('change', markDirty);
+    document.addEventListener('trix-change', markDirty);
+    document.addEventListener('submit', function (e) { if (e.target.dataset) delete e.target.dataset.dirty; });
+    window.addEventListener('beforeunload', function (e) {
+      if (document.querySelector('form[data-unsaved][data-dirty]')) { e.preventDefault(); e.returnValue = ''; }
+    });
+
+    // ---- "/" jumps to search (v1.17) ----
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+      var t = e.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|TRIX-EDITOR)$/.test(t.tagName))) return;
+      var home = document.querySelector('.gsearch-home input');
+      var sec = document.querySelector('.ccm-search');
+      var input = home || (sec && sec.querySelector('input'));
+      if (!input) return;
+      e.preventDefault();
+      if (!home && sec && !sec.classList.contains('open')) {
+        var btn = sec.querySelector('.ccm-sec-btn');
+        if (btn && getComputedStyle(btn).display !== 'none') btn.click();
+      }
+      input.focus();
+      input.select && input.select();
     });
 
     // ---- Favorites and recent pages ----
