@@ -66,13 +66,14 @@ STAGES = {
     },
     'Ready to Ship': {
         'team': 'Shipping', 'hold': False,
-        'guide': "Shipping: pack it and send it back to the customer. Add the carrier and tracking number "
-                 "as a work-log note, then move it to Shipped.",
+        'guide': "Shipping: pack it and send it back to the customer, then post a ticket update moving it to "
+                 "Shipped with the carrier and tracking number. Shipping can close it afterwards.",
     },
     'Shipped': {
         'team': 'Admin', 'hold': False,
-        'guide': "Admin: turn the QuickBooks estimate into an invoice, enter the invoice number, then close "
-                 "the ticket. Warranty and declined tickets have no invoice; just close them.",
+        'guide': "Shipping or Admin: close the ticket once it's out the door (pick the resolution). Admin: turn "
+                 "the QuickBooks estimate into an invoice and enter the invoice number; it can still be added "
+                 "after the ticket is closed. Warranty and declined tickets have no invoice.",
     },
     'Closed': {
         'team': None, 'hold': False,
@@ -118,8 +119,8 @@ NEXT = {
 }
 # Which role acts for each team. "Admin" means the Admin or SuperAdmin role.
 TEAM_ROLE = {'Repair team': 'Technician', 'Sales': 'Sales', 'Shipping': 'Shipping'}
-# Moves another team may also make (Sales coordinates outsourced repairs).
-EXTRA_MOVES = {('Received', 'At Partner'): 'Sales', ('Approved', 'At Partner'): 'Sales'}
+# Moves another team may also make (Sales coordinates outsourced repairs; Shipping closes what it shipped, v1.19).
+EXTRA_MOVES = {('Received', 'At Partner'): 'Sales', ('Approved', 'At Partner'): 'Sales', ('Shipped', 'Closed'): 'Shipping'}
 
 RESOLUTIONS = ['Repaired', 'Warranty', 'Declined', 'Exchanged', 'Returned unrepaired']
 TEAMS = ['Repair team', 'Sales', 'Shipping', 'Admin']

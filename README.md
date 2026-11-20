@@ -11,10 +11,10 @@ The **home page** (click **CC Medical** at the top left of any page) has a big s
 **The sidebar** is the same on every page, in the same order, with the current page highlighted. Each group has an icon:
 
 - **Home** (house)
-- **Inventory** (box): opens Active stock, with a drop-down to switch to Sold or All. **Loaners**, **Rental**, **Pending** and **Needs Review** show how many items each holds; Pending turns yellow and Needs Review red when they have any.
+- **Inventory** (box): **+ New Inventory** (receiving; Admins and Shipping), then Inventory, which opens Active stock, with a drop-down to switch to Sold or All. **Loaners**, **Rental**, **Pending** and **Needs Review** show how many items each holds; Pending turns yellow and Needs Review red when they have any.
 - **Repairs** (wrench): Customer Repairs (RP) and Core Repairs (CR), each with its number of open tickets or cores.
 - **Reference** (file cabinet): Customers, Product Database.
-- **Shipping** (truck): + New Inventory (receiving) and the **Shipping queue**: repairs ready to ship (with a count), items out on loan or rental, and placeholders for stock orders and expected arrivals until the Shipping rework.
+- **Shipping** (truck): the **Shipping queue**: repairs ready to ship (with a count), items out on loan or rental, and placeholders for stock orders and expected arrivals until the Shipping rework.
 - **Admin** (gear, Admins only): Users, Admin Mode.
 - **Account** (person): who you're signed in as, Change password, View as, Sign out.
 
@@ -76,7 +76,7 @@ Each account has one or more roles. The full rules are in `PERMISSIONS` in `auth
 - **SuperAdmin**: everything, plus Admin accounts, database backup and restore.
 - **Admin**: all inventory, customers, catalog and settings, linking customers to Salesforce. Manages Sales, Shipping and Technician accounts.
 - **Sales**: customers, repair tickets, repair pricing and approvals, inventory lookups and purchase costs.
-- **Shipping**: receiving, shelf moves, repair tickets, and shipping repairs back (Ready to Ship to Shipped).
+- **Shipping**: receiving, shelf moves, repair tickets, shipping repairs back (Ready to Ship to Shipped) and closing them once shipped.
 - **Technician**: repair evaluation and repair work, ticket updates on repairs and cores (can enter parts costs but not see amounts), shelf moves, opening their own repair tickets (assigned to themselves). Can read the Product Database, Active and All lists, but has no Sold, Loaners or Rental lists; a single record still opens from search results or a serial alert. On a repair ticket a technician edits eval findings, location, assignment and updates; serial, model, part number, manufacturer, customer and RMA corrections are for Shipping, Sales or Admin. No costs or prices.
 
 **View as (SuperAdmin):** the *View as…* menu at the bottom of the sidebar shows the app exactly as an Admin, Sales, Shipping or Technician account would see it. A yellow box shows while it's on; *Back to SuperAdmin* switches back.
@@ -98,7 +98,7 @@ Each customer repair is a ticket with one owner at each stage, like an IT helpde
 | Waiting on Parts | Repair team (on hold) | In Repair |
 | Repair Complete | Sales | Ready to Ship |
 | Ready to Ship | Shipping | Shipped |
-| Shipped | Admin (invoice) | Closed |
+| Shipped | Shipping or Admin (Admin adds the invoice #) | Closed |
 | Closed | — | Admin can reopen |
 | At Partner | Sales (on hold) | Eval Complete, Ready to Ship, or Shipped |
 | Declined | Sales | Ready to Ship (returned free) |
@@ -107,7 +107,7 @@ Each customer repair is a ticket with one owner at each stage, like an IT helpde
 - **One Ticket update box (since v1.17, like the core page):** day worked on, Start and End time (the Total in hours fills in by itself, e.g. 1.75 hrs), the update in rich text, parts cost, additional cost, an optional link (a OneDrive report, photos), and a **Status update** drop-down that moves the ticket on. Everything is optional, but something has to be filled in. The ticket shows the total time logged.
 - **Moving a ticket:** the Status update drop-down lists only the stages your role can move it to (it's the team whose turn it is); Admins also get "Admin: any stage", including reopening a closed ticket. Every move, update and edit goes in the ticket's work log with who and when; an update that also changes the stage is one entry.
 - **Shipping a repair:** choosing **Shipped** asks for the carrier (UPS, FedEx, USPS, DHL, Freight, Courier, Customer pickup, Hand delivered, Other) and the tracking number (not needed for pickup or hand delivery). Both are saved on the ticket with a link to the carrier's tracking page, and listed under **Recently shipped** on the Shipping queue for 14 days. Shipping, Sales and Admins can correct them under Ticket details.
-- **Closing:** choosing **Closed** shows the resolution picker ("Work it out for me" by default).
+- **Closing:** choosing **Closed** shows the resolution picker ("Work it out for me" by default). Since v1.19 **Shipping can close a Shipped ticket** as well as Admins, since they handle the last step; Recently shipped on the Shipping queue marks tickets that aren't closed yet. Admins can still add the invoice number after a ticket is closed.
 - **The queue** can be sorted by any column (click the header; click again to reverse). It opens longest-in-stage first and has a Received date column.
 - **On hold** stages don't turn yellow or red.
 - **RMA numbers** are created automatically (RMA-10001, ...) if left blank; the field can also hold a partner's RMA.

@@ -42,15 +42,17 @@ the rest is a placeholder for the Shipping rework (request → pick by shelf →
   </div>
   <div class="panel">
     <h2 style="margin:0 0 6px;font-size:17px">Recently shipped</h2>
-    <p class="muted" style="margin:0 0 10px">Customer repairs shipped in the last 14 days, with their tracking (v1.17).</p>
+    <p class="muted" style="margin:0 0 10px">Customer repairs shipped in the last 14 days, with their tracking. Open a ticket marked
+      <b>Not closed</b> and post a ticket update with Status update → Closed once it's delivered (v1.19).</p>
     <table>
-      <tr><th>Ticket</th><th>Customer</th><th>Equipment</th><th>Shipped</th><th>Carrier</th><th>Tracking</th></tr>
+      <tr><th>Ticket</th><th>Customer</th><th>Equipment</th><th>Shipped</th><th>Carrier</th><th>Tracking</th><th>Ticket</th></tr>
       {% for r in shipped %}
         <tr><td><a href="/repairs/{{ r.id }}">{{ r.inventory_code or r.rma }}</a></td><td>{{ r.customer }}</td>
           <td>{{ r.manufacturer or '' }} {{ r.model or '' }}</td><td>{{ r.shipped_at|day }}</td><td>{{ r.carrier or '—' }}</td>
-          <td>{% if tracking_url(r.carrier, r.tracking_number) %}<a href="{{ tracking_url(r.carrier, r.tracking_number) }}" target="_blank" rel="noopener">{{ r.tracking_number }}</a>{% else %}{{ r.tracking_number or '—' }}{% endif %}</td></tr>
+          <td>{% if tracking_url(r.carrier, r.tracking_number) %}<a href="{{ tracking_url(r.carrier, r.tracking_number) }}" target="_blank" rel="noopener">{{ r.tracking_number }}</a>{% else %}{{ r.tracking_number or '—' }}{% endif %}</td>
+          <td>{% if r.stage == 'Closed' %}<span class="muted">Closed</span>{% else %}<b>Not closed</b>{% endif %}</td></tr>
       {% else %}
-        <tr><td colspan="6" class="muted">Nothing shipped in the last 14 days.</td></tr>
+        <tr><td colspan="7" class="muted">Nothing shipped in the last 14 days.</td></tr>
       {% endfor %}
     </table>
   </div>

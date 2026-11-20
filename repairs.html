@@ -1066,7 +1066,7 @@
                         </div>
                         <div class="field">
                           <label>QuickBooks invoice #</label>
-                          <input name="invoice_number" value="{{r.invoice_number or ''}}" placeholder="Admin adds this before closing" {% if not can('repair_invoice') %}readonly{% endif %}>
+                          <input name="invoice_number" value="{{r.invoice_number or ''}}" placeholder="Admin adds this (before or after closing)" {% if not can('repair_invoice') %}readonly{% endif %}>
                         </div>
                         {% if r.stage=='Closed' %}
                           <div class="field">
