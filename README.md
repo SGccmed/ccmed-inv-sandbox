@@ -256,7 +256,7 @@ python app.py import "C:\path\to\inventory.xlsx"
 
 ## Backups
 
-A SuperAdmin can download the whole database from **Product Database → Admin Mode → Download database backup**, and replace it at `/admin/restore`. The restore page downloads a safety copy of the current data first.
+A SuperAdmin can download the whole database from **Product Database → Admin Mode → Download database backup**, and replace it at `/admin/restore`. The restore page downloads a safety copy of the current data first; that's ticked by default. For demo data you can untick it: a second "Skip the safety copy?" step appears, and its **Yes, skip it** button unlocks after 5 seconds. Without the safety copy you land on Home with a summary of what was restored (for example "69 stock items, 22 repair tickets, 8 cores").
 
 ## Optional settings (environment variables)
 

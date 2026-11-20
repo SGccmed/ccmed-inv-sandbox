@@ -298,12 +298,50 @@ def backup_download():
  src=conn();dst=sqlite3.connect(tmp);src.backup(dst);dst.close();src.close()
  return send_file(tmp,as_attachment=True,download_name=tmp.name)
 
+# v1.18: the safety copy is on by default. Turning it off shows a second "are you sure" step whose button only
+# unlocks after 5 seconds; the server also refuses a restore without the safety copy unless that step was confirmed.
 RESTORE_PAGE='''<p><a href="/products/admin">Back to admin</a></p><div class="panel"><h1>Restore database from a backup</h1>
-<p>Upload an <b>inventory.db</b> file (for example, the one from your computer, or a backup downloaded from this site). It replaces <b>all</b> current inventory data. A safety copy of the current database is downloaded automatically first, so keep it until you've checked the restored data.</p>
+<p>Upload an <b>inventory.db</b> file (for example, the one from your computer, a backup downloaded from this site, or
+<b>walkthrough_inventory.db</b> / <b>demo_inventory.db</b>). It replaces <b>all</b> current inventory data.</p>
 <p>User accounts on this site are kept if the uploaded file has none.</p>
-<form method="post" enctype="multipart/form-data"><label>Database file</label><input type="file" name="file" accept=".db,.sqlite,.sqlite3" required>
+<form method="post" enctype="multipart/form-data" id="restoreform"><label>Database file</label><input type="file" name="file" accept=".db,.sqlite,.sqlite3" required>
+<label><input type="checkbox" name="safety" value="yes" checked style="width:auto" id="safety"> Download a safety copy of the current data first (recommended)</label>
+<div id="skipbox" class="msg" style="display:none">
+  <b>Skip the safety copy?</b> The current data will be replaced and you won't have a copy of it. That's fine for demo
+  data (it's wiped on the free plan anyway), but never for real data.
+  <div class="inline" style="margin-top:10px"><button type="button" class="secondary" id="skipyes" disabled>Yes, skip it (5)</button>
+  <button type="button" class="secondary" id="skipno">No, keep the safety copy</button></div>
+</div>
+<input type="hidden" name="skip_confirm" value="" id="skipconfirm">
 <label><input type="checkbox" name="confirm" value="yes" required style="width:auto"> I understand this replaces all current data</label>
-<button class="danger">Restore database</button></form></div>'''
+<button class="danger" id="restorebtn">Restore database</button></form></div>
+<script>
+(function () {
+  var safety = document.getElementById('safety'), box = document.getElementById('skipbox'), yes = document.getElementById('skipyes');
+  var no = document.getElementById('skipno'), hidden = document.getElementById('skipconfirm'), go = document.getElementById('restorebtn');
+  var timer = null;
+  function reset() {
+    clearInterval(timer); hidden.value = ''; box.style.display = 'none'; yes.disabled = true; yes.textContent = 'Yes, skip it (5)';
+    go.disabled = false; go.textContent = 'Restore database';
+  }
+  safety.addEventListener('change', function () {
+    if (safety.checked) { reset(); return; }
+    box.style.display = 'block'; go.disabled = true; go.title = 'Confirm skipping the safety copy first';
+    var left = 5; yes.disabled = true; yes.textContent = 'Yes, skip it (' + left + ')';
+    clearInterval(timer);
+    timer = setInterval(function () {
+      left -= 1;
+      if (left > 0) { yes.textContent = 'Yes, skip it (' + left + ')'; return; }
+      clearInterval(timer); yes.disabled = false; yes.textContent = 'Yes, skip it';
+    }, 1000);
+  });
+  yes.addEventListener('click', function () {
+    hidden.value = 'yes'; box.innerHTML = '<b>No safety copy will be downloaded.</b> Tick the box above again to get one.';
+    go.disabled = false; go.title = ''; go.textContent = 'Restore without a safety copy';
+  });
+  no.addEventListener('click', function () { safety.checked = true; reset(); });
+})();
+</script>'''
 
 @app.route('/admin/restore',methods=['GET','POST'])
 def restore_upload():
@@ -313,6 +351,9 @@ def restore_upload():
  if request.method=='GET':return simple_page('Restore database',RESTORE_PAGE,width=640)
  f=request.files.get('file')
  if not f or request.form.get('confirm')!='yes':flash('Choose a file and tick the confirmation box.');return redirect(url_for('restore_upload'))
+ want_safety=request.form.get('safety')=='yes'
+ if not want_safety and request.form.get('skip_confirm')!='yes':
+  flash('Confirm skipping the safety copy (or tick "Download a safety copy" again).');return redirect(url_for('restore_upload'))
  import tempfile
  work=Path(tempfile.mkdtemp());up=work/'upload.db';f.save(up)
  try:
@@ -342,7 +383,13 @@ def restore_upload():
  init_db()
  # The restored file brought its own accounts (IDs may differ), so sign in again.
  if file_has_users:session.clear()
- return send_file(safety,as_attachment=True,download_name=safety.name)
+ if want_safety:return send_file(safety,as_attachment=True,download_name=safety.name)
+ c=conn()
+ try:counts=[c.execute(q).fetchone()[0] for q in ('SELECT COUNT(*) FROM units','SELECT COUNT(*) FROM customer_repairs','SELECT COUNT(*) FROM core_items')]
+ finally:c.close()
+ name=Path(f.filename or 'the file').name
+ flash(f'Restored {name}: {counts[0]} stock items, {counts[1]} repair tickets, {counts[2]} cores. No safety copy was downloaded.')
+ return redirect('/')
 
 from product_database import register_product_routes, ensure_product_schema, link_units, product_matcher, NOT_IN_CATALOG
 register_auth(app,conn)
