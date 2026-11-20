@@ -486,8 +486,7 @@
     <div class="shell">
       <!--sidebar-->
       <div class="workspace">
-        <header class="topbar"><strong>Inventory / Overview</strong><span>CC Medical · Local
-          application</span></header>
+        <header class="topbar"><strong>Inventory / Overview</strong></header>
         <main class="content">
           <div class="pagehead">
             <div>
@@ -498,7 +497,7 @@
           </div>
           {% with messages=get_flashed_messages() %}
             {% for m in messages %}
-              <div class="notice {% if m.startswith('⚠') %}warn{% endif %}">{{m}}</div>
+              <div class="notice {% if m.startswith('⚠') %}warn{% endif %}" data-flash>{{m}}</div>
             {% endfor %}
           {% endwith %}
           {% if unit %}
@@ -539,7 +538,7 @@
                     ('Review Flags',unit.review),
                     ('Original Excel Row',unit.source_row)] %}
                   <dt>{{label}}</dt>
-                  <dd>{{val if val is not none and val!='' else '—'}}</dd>
+                  <dd>{% if val is not none and val!='' %}{% if label in ('Inventory Code', 'Serial Number') %}<span data-copy>{{val}}</span>{% else %}{{val}}{% endif %}{% else %}—{% endif %}</dd>
                 {% endfor %}
                 <dt>Catalog product</dt>
                 <dd>{% if product %}<a href="/products/{{product.id}}">{{product.display_name}}</a>{% else %}<span class="muted">Not linked to a Product Database entry</span>{% endif %}</dd>
@@ -703,7 +702,7 @@
                       <tr>
                         <td><a href="/unit/{{u.id}}">{{u.inventory_code or ("Legacy #" ~ u.id)}}</a></td>
                         <td><a href="/unit/{{u.id}}"><strong>{{u.product_raw}}</strong></a></td>
-                        <td class="serial">{{u.serial}}</td>
+                        <td class="serial">{% if u.serial %}<span data-copy>{{u.serial}}</span>{% endif %}</td>
                         <td>{{u.physical_location or u.location_raw}}</td>
                         <td><span class="pill {% if u.status=='Sold archive' %}sold{% endif %}">{{u.status}}</span></td>
                         {% if can('view_cost') %}

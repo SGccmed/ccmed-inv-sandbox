@@ -22,12 +22,33 @@
     overflow-y: auto;
     background: #112a42;
     color: #e4edf5;
-    padding: 18px 14px 18px;
+    padding: 18px 14px 18px 10px;
     display: flex;
+    /* v1.22: the scroll bar sits on the left edge, thin and dark, so it never covers the collapse button or
+       squeezes the links on the right. direction: rtl moves it; everything inside is set back to ltr. */
+    direction: rtl;
+    scrollbar-width: thin;
+    scrollbar-color: #2b4a66 transparent;
     flex-direction: column;
     gap: 2px;
     z-index: 40;
     font: 14px/1.5 system-ui, -apple-system, Segoe UI, Arial, sans-serif
+  }
+  aside.ccm-side > * {
+    direction: ltr
+  }
+  aside.ccm-side::-webkit-scrollbar {
+    width: 6px
+  }
+  aside.ccm-side::-webkit-scrollbar-track {
+    background: transparent
+  }
+  aside.ccm-side::-webkit-scrollbar-thumb {
+    background: #2b4a66;
+    border-radius: 3px
+  }
+  aside.ccm-side::-webkit-scrollbar-thumb:hover {
+    background: #3a6188
   }
   body {
     padding-left: 232px
@@ -42,29 +63,28 @@
     stroke-linecap: round;
     stroke-linejoin: round
   }
+  /* v1.22: the logo spans the full width of the menu (same as a highlighted link); under it, "Inventory
+     Workspace" on the left and the collapse button on the right. */
   .ccm-top {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 6px
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    row-gap: 4px;
+    padding-bottom: 10px
   }
   aside.ccm-side .ccm-brand {
+    grid-column: 1 / -1;
     display: block;
-    color: #ffffff;
-    font-size: 21px;
-    font-weight: 750;
-    padding: 0 12px 12px;
     text-decoration: none;
-    background: none;
-    white-space: nowrap
+    background: none
   }
-  aside.ccm-side .ccm-brand small {
-    display: block;
+  aside.ccm-side .ccm-ws {
     color: #91a9be;
     font-size: 10px;
     font-weight: 600;
     letter-spacing: 1px;
-    text-transform: uppercase
+    text-transform: uppercase;
+    padding-left: 4px
   }
   .ccm-brand .ccm-short {
     display: none
@@ -78,11 +98,11 @@
     line-height: 0
   }
   aside.ccm-side .ccm-full.ccm-logo {
-    display: inline-block;
-    margin-bottom: 6px
+    display: block;
+    padding: 9px 14px
   }
   aside.ccm-side .ccm-full img {
-    width: 140px;
+    width: 100%;
     height: auto
   }
   aside.ccm-side .ccm-short img {
@@ -97,7 +117,8 @@
     padding: 4px;
     border-radius: 6px;
     cursor: pointer;
-    margin: 2px 0 0
+    margin: 0;
+    line-height: 0
   }
   .ccm-collapse:hover {
     background: #203d56;
@@ -217,20 +238,20 @@
     html.ccm-collapsed body {
       padding-left: 64px
     }
-    html.ccm-collapsed .ccm-top {
-      flex-direction: column;
-      align-items: center
+    html.ccm-collapsed aside.ccm-side {
+      direction: ltr
     }
-    html.ccm-collapsed aside.ccm-side .ccm-brand {
-      padding: 0 0 6px;
-      font-size: 17px
+    html.ccm-collapsed .ccm-top {
+      grid-template-columns: 1fr;
+      justify-items: center;
+      padding-bottom: 4px
     }
     html.ccm-collapsed .ccm-brand .ccm-full,
-    html.ccm-collapsed .ccm-brand small {
+    html.ccm-collapsed .ccm-ws {
       display: none
     }
     html.ccm-collapsed .ccm-brand .ccm-short {
-      display: inline
+      display: inline-block
     }
     html.ccm-collapsed .ccm-label {
       display: none
@@ -317,28 +338,29 @@
       flex-direction: row;
       align-items: center;
       gap: 2px;
-      padding: 4px 6px
+      padding: 4px 6px;
+      direction: ltr
     }
     body {
       padding-left: 0;
       padding-top: 52px
     }
     .ccm-top {
-      align-items: center
+      display: flex;
+      align-items: center;
+      padding: 0 6px 0 2px
+    }
+    aside.ccm-side .ccm-ws {
+      display: none
     }
     .ccm-collapse {
       display: none
     }
-    aside.ccm-side .ccm-brand {
-      padding: 0 8px 0 4px;
-      font-size: 17px
-    }
-    aside.ccm-side .ccm-brand .ccm-full,
-    aside.ccm-side .ccm-brand small {
+    aside.ccm-side .ccm-brand .ccm-full {
       display: none
     }
     aside.ccm-side .ccm-brand .ccm-short {
-      display: inline
+      display: inline-block
     }
     .ccm-nav {
       display: flex;
@@ -441,7 +463,8 @@
   {% set sb_ship_here = sb_path.startswith('/shipping') %}
   {% set sb_adm_here = sb_path.startswith('/users') or sb_path.startswith('/products/admin') %}
   <div class="ccm-top">
-    <a href="/" class="ccm-brand" title="CC Medical · Home"><span class="ccm-full ccm-logo"><img src="/assets/ccmed-logo.svg" alt="CC Medical"></span><span class="ccm-short ccm-logo"><img src="/assets/ccmed-mark.svg" alt="CC Medical"></span><small>Inventory Workspace</small></a>
+    <a href="/" class="ccm-brand" title="CC Medical · Home"><span class="ccm-full ccm-logo"><img src="/assets/ccmed-logo.svg" alt="CC Medical"></span><span class="ccm-short ccm-logo"><img src="/assets/ccmed-mark.svg" alt="CC Medical"></span></a>
+    <small class="ccm-ws">Inventory Workspace</small>
     <button type="button" class="ccm-collapse" aria-label="Collapse or expand the menu" title="Collapse or expand the menu"
       onclick="ccmToggleSide()"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/><path d="M20 6l-6 6 6 6"/></svg></button>
   </div>

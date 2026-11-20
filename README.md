@@ -18,6 +18,8 @@ The **home page** (click **CC Medical** at the top left of any page) has a big s
 - **Admin** (gear, Admins only): Users, Admin Mode.
 - **Account** (person): who you're signed in as, Change password, View as, Sign out.
 
+**Top of the sidebar (v1.22):** the logo spans the menu's width; under it, *Inventory Workspace* and the « collapse button. When the menu is taller than the window, its thin scroll bar is on the left edge so it never covers anything.
+
 **Collapsing it (since v1.16):** on a wide screen the « button at the top folds the sidebar into a thin rail of icons; click or hover an icon to open its links beside it. Your browser remembers the choice. On narrower windows and phones the sidebar is a bar of icons across the top; tap one to open its links under the bar. A red dot on the Inventory icon means items need review (yellow: pending).
 
 **Themes (since v1.16):** Light, Dark (blue/black) and OLED (true black, dark blue) are picked in the **Home** page header. The choice is saved to your account, so it follows you to any computer. `theme.py` applies it to every page.
@@ -162,6 +164,9 @@ Every customer, location, manufacturer and model field is a type-to-search drop-
 - **Adjusting a cost (Admin, SuperAdmin):** a stock item's cost, a core's purchase cost, the parts or additional cost on one core update, and a repair's quoted price can each be corrected on the record's page. A reason is required; the old and new amounts, who and when are kept with the cost. On a stock item it's one **Cost** box: the current cost, every change, and (for Admins) the Adjust form. Sales sees the box without the form; technicians and Shipping don't see it. A converted core is adjusted through its stock item.
 - **Sorting:** the stock list, repair queue and core list sort by clicking a column header.
 - **Unsaved changes:** ticket updates (repairs and cores), + New Inventory and the new repair ticket form ask before you leave the page with something typed in them.
+- **Long tables (v1.22):** on wide screens the inventory, repair queue, core, product and customer lists scroll inside the page so the column headers stay in view; the row under the mouse is highlighted.
+- **Copy buttons (v1.22):** a small copy icon next to ticket / item / core IDs, RMA numbers, serial numbers and tracking numbers copies them for an email, QuickBooks or a carrier site (in tables the icon shows when you point at the cell).
+- **Messages (v1.22):** confirmations like "Saved" or "Update posted" pop up in the top right corner and fade after a few seconds (point at one to keep it). Warnings and problems stay until you close them with ×.
 - **Search shortcut:** press **/** on any page to jump to the search box.
 - **Costs:** a negative or non-numeric cost turns the field red with a warning and greys out the form's submit button until it's fixed. The server also refuses negative costs.
 

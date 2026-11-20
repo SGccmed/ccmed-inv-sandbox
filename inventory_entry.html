@@ -180,7 +180,7 @@
         {% endif %}
         {% with messages=get_flashed_messages() %}
           {% for m in messages %}
-            <div class="notice {% if m.startswith('⚠') %}warn{% endif %}">{{m}}</div>
+            <div class="notice {% if m.startswith('⚠') %}warn{% endif %}" data-flash>{{m}}</div>
           {% endfor %}
         {% endwith %}
         <div class="panel">

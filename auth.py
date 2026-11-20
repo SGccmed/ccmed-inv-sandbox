@@ -281,7 +281,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:9px;border-bottom:1px so
 th{font-size:12px;color:#667a8e}a{color:#245d86}.muted{color:#697b8d;font-size:12px}
 .inline{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.inline input{width:170px}.inline button{margin:0;padding:7px 11px}
 </style></head><body><div class="wrap"><div class="brand">CC Medical Inventory</div>
-{% with msgs=get_flashed_messages() %}{% for m in msgs %}<div class="msg">{{ m }}</div>{% endfor %}{% endwith %}
+{% with msgs=get_flashed_messages() %}{% for m in msgs %}<div class="msg" data-flash>{{ m }}</div>{% endfor %}{% endwith %}
 {{ body|safe }}</div></body></html>"""
 SIMPLE_PAGE_WITH_SIDEBAR = add_user_block(SIMPLE_PAGE.replace("<body>", "<body><!--sidebar-->", 1))
 

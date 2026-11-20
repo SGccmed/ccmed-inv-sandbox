@@ -194,7 +194,7 @@ a{color:#245d86}label{display:block;margin:0 0 4px;font-weight:600;font-size:12p
 @media(max-width:560px){.grid,.cards{grid-template-columns:1fr}.grid .wide{grid-column:span 1}dl{grid-template-columns:1fr}}</style>'''
 LAYOUT = add_user_block('''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CC Medical | Customers</title>''' + STYLE + '''</head><body>
 <!--sidebar-->
-<main>{% with msgs=get_flashed_messages() %}{% for m in msgs %}<div class="msg">{{m}}</div>{% endfor %}{% endwith %}{{body|safe}}</main></body></html>''')
+<main>{% with msgs=get_flashed_messages() %}{% for m in msgs %}<div class="msg" data-flash>{{m}}</div>{% endfor %}{% endwith %}{{body|safe}}</main></body></html>''')
 
 
 def page(body, **ctx):
@@ -208,7 +208,7 @@ LIST_PAGE = '''<div class="toolbar" style="justify-content:space-between"><div><
 <div><label>Status</label><select name="status"><option value="">All statuses</option>{% for s in statuses %}<option {% if s==status %}selected{% endif %}>{{s}}</option>{% endfor %}</select></div>
 <div><label>Account owner</label><select name="owner"><option value="">Anyone</option>{% for o in owners %}<option {% if o==owner %}selected{% endif %}>{{o}}</option>{% endfor %}</select></div>
 <button>Filter</button><a class="btn secondary" href="/clients">Clear</a></form></section>
-<section><div style="overflow:auto"><table><tr><th>Customer ID</th><th>Name</th><th>Type</th><th>Status</th><th>Primary contact</th><th>Phone</th><th>Account owner</th><th>Salesforce</th><th>Open RMAs</th><th>Total RMAs</th><th>Last activity</th></tr>
+<section><div class="tablewrap" style="overflow:auto"><table><tr><th>Customer ID</th><th>Name</th><th>Type</th><th>Status</th><th>Primary contact</th><th>Phone</th><th>Account owner</th><th>Salesforce</th><th>Open RMAs</th><th>Total RMAs</th><th>Last activity</th></tr>
 {% for r in rows %}<tr><td>{{r.client_code}}</td><td><a href="/clients/{{r.id}}"><strong>{{r.name}}</strong></a></td><td>{{r.account_type or ''}}</td><td><span class="pill {{r.status}}">{{r.status}}</span></td><td>{{r.contact or '—'}}</td><td class="nw">{{r.phone or ''}}</td><td>{{r.account_owner or ''}}</td><td>{{'Linked' if r.salesforce_id else '—'}}</td><td>{{r.open_rmas}}</td><td>{{r.total_rmas}}</td><td class="nw">{{r.last_activity|day if r.last_activity else ''}}</td></tr>
 {% else %}<tr><td colspan="11">No customers match.</td></tr>{% endfor %}</table></div><p class="muted">{{rows|length}} shown</p></section>'''
 

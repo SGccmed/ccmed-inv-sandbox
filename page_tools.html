@@ -12,7 +12,15 @@
         from the list: anything else turns red and greys out the submit button, like a bad cost
         (data-current="<old value>" lets an unchanged old value stay). Typed values are tidied to the list's
         spelling ("a1" becomes "A1", "cannon" becomes "Canon/Toshiba"). Customers are looked up live
-        (/api/customers). Details are in the "Drop-down lists" part of the script below. -->
+        (/api/customers). Details are in the "Drop-down lists" part of the script below.
+     6. v1.22 UI/UX:
+        - Sticky table headers: on wide screens a long table in a .tablewrap scrolls inside the page, so its header
+          row stays in view; rows highlight on hover.
+        - Copy buttons: any element with data-copy gets a small copy icon (data-copy="text", or its own text if
+          empty). Used on ticket / item / core IDs, RMAs, serials and tracking numbers.
+        - Save messages (flash messages marked data-flash) appear as a toast in the top right corner. Plain
+          confirmations ("Saved", "Update posted", "Moved to ...") fade after 5 seconds (hovering keeps them); anything
+          else, including warnings and refusals, stays until closed (x). See TOAST_DONE / TOAST_STAYS. -->
 <datalist id="dl-locations">
   {% for loc in LOCATIONS %}
     <option value="{{ loc }}">
@@ -173,6 +181,118 @@
   @media (pointer: coarse) {
     .combo-item {
       padding: 12px
+    }
+  }
+
+  /* ---- v1.22: sticky table headers and row hover ---- */
+  @media (min-width: 1000px) {
+    .tablewrap {
+      max-height: calc(100vh - 110px);
+      overflow: auto
+    }
+    .tablewrap thead th,
+    .tablewrap tbody > tr:first-child > th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #f7f9fc;
+      box-shadow: inset 0 -1px 0 #dfe7ef
+    }
+  }
+  .tablewrap tbody tr:hover > td {
+    background: #f0f5f9
+  }
+  /* ---- v1.22: copy buttons ---- */
+  .copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin-left: 4px;
+    padding: 0;
+    vertical-align: middle;
+    border: 1px solid #cdd9e4;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #5f7486;
+    cursor: pointer;
+    line-height: 0
+  }
+  .copy-btn svg {
+    width: 13px;
+    height: 13px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round
+  }
+  .copy-btn:hover {
+    color: #245d86;
+    border-color: #245d86
+  }
+  .copy-btn.done {
+    color: #1d6b33;
+    border-color: #1d6b33
+  }
+  @media (hover: hover) {
+    td .copy-btn {
+      opacity: 0
+    }
+    td:hover .copy-btn,
+    td .copy-btn:focus {
+      opacity: 1
+    }
+  }
+  /* ---- v1.22: save messages as toasts ---- */
+  .toasts {
+    position: fixed;
+    top: 58px;
+    right: 18px;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: min(420px, calc(100vw - 36px))
+  }
+  .toast {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    background: #ffffff;
+    color: #1b3043;
+    border: 1px solid #dfe7ef;
+    border-left: 4px solid #1d6b33;
+    border-radius: 10px;
+    padding: 10px 12px;
+    box-shadow: 0 8px 24px rgba(17, 42, 66, .16);
+    font-size: 13.5px;
+    line-height: 1.45;
+    transition: opacity .4s, transform .4s
+  }
+  .toast.stay {
+    border-left-color: #f0a500;
+    background: #fff4dc
+  }
+  .toast.gone {
+    opacity: 0;
+    transform: translateY(-6px)
+  }
+  .toast .toast-x {
+    margin-left: auto;
+    background: none;
+    border: 0;
+    color: #5f7486;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px
+  }
+  @media (max-width: 999px) {
+    .toasts {
+      top: 104px;
+      right: 10px
     }
   }
 </style>
@@ -711,7 +831,67 @@
       fetch('/api/page-visit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: url, label: pageLabel() }) }).catch(function () {});
     }
 
-    function start() { loadEditors(); setupFavorite(); setupCombos(); }
+
+    // ---- v1.22: copy buttons (data-copy) ----
+    var COPY_ICON = '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
+    var CHECK_ICON = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+    function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+      return new Promise(function (done) {
+        var t = document.createElement('textarea');
+        t.value = text; t.style.position = 'fixed'; t.style.opacity = '0';
+        document.body.appendChild(t); t.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        t.remove(); done();
+      });
+    }
+    function setupCopy() {
+      document.querySelectorAll('[data-copy]').forEach(function (el) {
+        var text = (el.getAttribute('data-copy') || el.textContent || '').trim();
+        if (!text || el.querySelector('.copy-btn') || (el.nextElementSibling && el.nextElementSibling.classList.contains('copy-btn'))) return;
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'copy-btn'; b.title = 'Copy ' + text; b.setAttribute('aria-label', 'Copy ' + text);
+        b.innerHTML = COPY_ICON;
+        b.addEventListener('click', function (e) {
+          e.preventDefault(); e.stopPropagation();
+          copyText(text).then(function () {
+            b.classList.add('done'); b.innerHTML = CHECK_ICON; b.title = 'Copied';
+            setTimeout(function () { b.classList.remove('done'); b.innerHTML = COPY_ICON; b.title = 'Copy ' + text; }, 1400);
+          });
+        });
+        el.insertAdjacentElement('afterend', b);
+        if (el.parentElement && el.parentElement.tagName === 'TD') el.parentElement.style.whiteSpace = 'nowrap';
+      });
+    }
+    // ---- v1.22: save messages as toasts (data-flash) ----
+    // Only plain confirmations fade (after 5 seconds): a message that says something was done (TOAST_DONE) and
+    // doesn't read like a problem (TOAST_STAYS). Anything else, including warnings, stays until closed.
+    var TOAST_DONE = /\b(saved|posted|moved|created|recorded|changed|updated|added|sent|linked|closed|restored|converted|returned|removed|deleted|received|opened|now)\b/i;
+    var TOAST_STAYS = /^\u26a0|can't|cannot|not allowed|not saved|not sent|isn't|is not|must|required|refused|already|too large|invalid|pick |enter |choose |write |no customer|confirm|only /i;
+    function setupToasts() {
+      var flashes = document.querySelectorAll('[data-flash]');
+      if (!flashes.length) return;
+      var box = document.createElement('div');
+      box.className = 'toasts'; box.setAttribute('role', 'status'); box.setAttribute('aria-live', 'polite');
+      document.body.appendChild(box);
+      flashes.forEach(function (f) {
+        var text = f.textContent.trim(), stay = TOAST_STAYS.test(text) || !TOAST_DONE.test(text) || f.classList.contains('warn');
+        var t = document.createElement('div');
+        t.className = 'toast' + (stay ? ' stay' : '');
+        var msg = document.createElement('div'); msg.textContent = text;
+        var x = document.createElement('button'); x.type = 'button'; x.className = 'toast-x'; x.setAttribute('aria-label', 'Close'); x.textContent = '\u00d7';
+        t.appendChild(msg); t.appendChild(x); box.appendChild(t);
+        f.remove();
+        function close() { t.classList.add('gone'); setTimeout(function () { t.remove(); }, 450); }
+        x.addEventListener('click', close);
+        if (!stay) {
+          var timer = setTimeout(close, 5000);
+          t.addEventListener('mouseenter', function () { clearTimeout(timer); });
+          t.addEventListener('mouseleave', function () { timer = setTimeout(close, 2500); });
+        }
+      });
+    }
+    function start() { loadEditors(); setupFavorite(); setupCombos(); setupCopy(); setupToasts(); }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
     else start();
   })();

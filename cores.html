@@ -600,7 +600,7 @@
         <main class="content">
           {% with messages=get_flashed_messages() %}
             {% for m in messages %}
-              <div class="notice {% if m.startswith('⚠') %}warn{% endif %}">{{m}}</div>
+              <div class="notice {% if m.startswith('⚠') %}warn{% endif %}" data-flash>{{m}}</div>
             {% endfor %}
           {% endwith %}
 
@@ -652,7 +652,7 @@
                       <tr>
                         <td><a href="/cores/{{r.id}}"><strong>{{r.inventory_code}}</strong></a></td>
                         <td>{{r.product_raw}}</td>
-                        <td>{{r.serial or ''}}</td>
+                        <td>{% if r.serial %}<span data-copy>{{r.serial}}</span>{% endif %}</td>
                         <td>{{r.location or ''}}</td>
                         <td><span class="pill">{{r.stage}}</span></td>
                         <td>
@@ -678,9 +678,9 @@
           {% else %}
             <div class="head">
               <div>
-                <h1>{{detail.inventory_code}} · {{detail.product_raw}}</h1>
+                <h1><span data-copy>{{detail.inventory_code}}</span> · {{detail.product_raw}}</h1>
                 <div class="muted">
-                  Serial {{detail.serial or '—'}} · Location {{detail.location or '—'}} · Received {{detail.created_at|day}}
+                  Serial {% if detail.serial %}<span data-copy>{{detail.serial}}</span>{% else %}—{% endif %} · Location {{detail.location or '—'}} · Received {{detail.created_at|day}}
                 </div>
               </div>
               <a href="/cores">← Back to cores</a>

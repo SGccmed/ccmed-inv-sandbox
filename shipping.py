@@ -51,7 +51,7 @@ the rest is a placeholder for the Shipping rework (request → pick by shelf →
       {% for r in shipped %}
         <tr><td><a href="/repairs/{{ r.id }}">{{ r.inventory_code or r.rma }}</a></td><td>{{ r.customer }}</td>
           <td>{{ r.manufacturer or '' }} {{ r.model or '' }}</td><td>{{ r.shipped_at|day }}</td><td>{{ r.carrier or '—' }}</td>
-          <td>{% if tracking_url(r.carrier, r.tracking_number) %}<a href="{{ tracking_url(r.carrier, r.tracking_number) }}" target="_blank" rel="noopener">{{ r.tracking_number }}</a>{% else %}{{ r.tracking_number or '—' }}{% endif %}</td>
+          <td>{% if tracking_url(r.carrier, r.tracking_number) %}<a href="{{ tracking_url(r.carrier, r.tracking_number) }}" target="_blank" rel="noopener">{{ r.tracking_number }}</a>{% else %}{{ r.tracking_number or '—' }}{% endif %}{% if r.tracking_number %}<span data-copy="{{ r.tracking_number }}"></span>{% endif %}</td>
           <td>{% if r.stage == 'Closed' %}<span class="muted">Closed</span>{% else %}<b>Not closed</b>{% endif %}</td></tr>
       {% else %}
         <tr><td colspan="7" class="muted">Nothing shipped in the last 14 days.</td></tr>
@@ -74,7 +74,7 @@ the rest is a placeholder for the Shipping rework (request → pick by shelf →
         <tr><td><a href="/repairs/{{ r.id }}">{{ r.inventory_code or r.rma }}</a></td><td>{{ r.customer }}</td>
           <td>{{ r.manufacturer or '' }} {{ r.model or '' }}{% if r.serial %} · S/N {{ r.serial }}{% endif %}</td>
           <td>{{ r.inbound_shipped_at|day if r.inbound_shipped_at else r.stage_started_at|day }}</td><td>{{ r.inbound_carrier or '—' }}</td>
-          <td>{% if tracking_url(r.inbound_carrier, r.inbound_tracking) %}<a href="{{ tracking_url(r.inbound_carrier, r.inbound_tracking) }}" target="_blank" rel="noopener">{{ r.inbound_tracking }}</a>{% else %}{{ r.inbound_tracking or '—' }}{% endif %}</td>
+          <td>{% if tracking_url(r.inbound_carrier, r.inbound_tracking) %}<a href="{{ tracking_url(r.inbound_carrier, r.inbound_tracking) }}" target="_blank" rel="noopener">{{ r.inbound_tracking }}</a>{% else %}{{ r.inbound_tracking or '—' }}{% endif %}{% if r.inbound_tracking %}<span data-copy="{{ r.inbound_tracking }}"></span>{% endif %}</td>
           <td>{{ r.days }}</td></tr>
       {% else %}
         <tr><td colspan="7" class="muted">No repairs are on their way back from a partner.</td></tr>

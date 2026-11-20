@@ -574,7 +574,7 @@
         <main class="content">
           {% with messages=get_flashed_messages() %}
             {% for m in messages %}
-              <div class="notice {% if m.startswith('⚠') %}warn{% endif %}">{{m}}</div>
+              <div class="notice {% if m.startswith('⚠') %}warn{% endif %}" data-flash>{{m}}</div>
             {% endfor %}
           {% endwith %}
 
@@ -682,7 +682,7 @@
                     {% for r in rows %}
                       <tr>
                         <td><a href="/repairs/{{r.id}}"><strong>{{r.inventory_code or 'Legacy #' ~ r.id}}</strong></a></td>
-                        <td>{{r.rma}}</td>
+                        <td><span data-copy>{{r.rma}}</span></td>
                         <td>
                           {% if r.client_id and can('client_view') %}
                             <a href="/clients/{{r.client_id}}">{{r.customer}}</a>
@@ -692,7 +692,7 @@
                         </td>
                         <td>{{r.account_owner or ''}}</td>
                         <td>{{r.manufacturer or ''}} {{r.model or ''}}</td>
-                        <td>{{r.serial or ''}}</td>
+                        <td>{% if r.serial %}<span data-copy>{{r.serial}}</span>{% endif %}</td>
                         <td><span class="pill">{{r.stage}}</span>{% if r.warranty %} <span class="pill">Warranty</span>{% endif %}</td>
                         <td>{{r.turn}}</td>
                         <td>{{r.assigned_name or '—'}}</td>
@@ -796,9 +796,9 @@
           {% else %}
             <div class="head">
               <div>
-                <h1>{{r.inventory_code or 'Legacy #' ~ r.id}} · {{r.manufacturer or ''}} {{r.model or ''}}</h1>
+                <h1><span data-copy>{{r.inventory_code or 'Legacy #' ~ r.id}}</span> · {{r.manufacturer or ''}} {{r.model or ''}}</h1>
                 <div class="muted">
-                  RMA {{r.rma}} · {{r.customer}}{% if r.account_owner %} · Sales rep: {{r.account_owner}}{% endif %}
+                  RMA <span data-copy>{{r.rma}}</span>{% if r.serial %} · S/N <span data-copy>{{r.serial}}</span>{% endif %} · {{r.customer}}{% if r.account_owner %} · Sales rep: {{r.account_owner}}{% endif %}
                   · Received {{r.received_date|day}}
                 </div>
               </div>
@@ -844,12 +844,12 @@
               <div class="panel" style="padding:12px 16px">
                 {% if r.inbound_carrier or r.inbound_tracking %}
                   <div><strong>Back from partner:</strong> {{r.inbound_carrier or '—'}}
-                    {% if tracking_url(r.inbound_carrier, r.inbound_tracking) %}· <a href="{{ tracking_url(r.inbound_carrier, r.inbound_tracking) }}" target="_blank" rel="noopener">{{r.inbound_tracking}} ↗</a>{% elif r.inbound_tracking %}· {{r.inbound_tracking}}{% endif %}
+                    {% if tracking_url(r.inbound_carrier, r.inbound_tracking) %}· <a href="{{ tracking_url(r.inbound_carrier, r.inbound_tracking) }}" target="_blank" rel="noopener">{{r.inbound_tracking}} ↗</a>{% elif r.inbound_tracking %}· {{r.inbound_tracking}}{% endif %}{% if r.inbound_tracking %}<span data-copy="{{r.inbound_tracking}}"></span>{% endif %}
                     {% if r.inbound_shipped_at %}<span class="muted">· {{r.inbound_shipped_at|day}}</span>{% endif %}</div>
                 {% endif %}
                 {% if r.carrier or r.tracking_number %}
                   <div><strong>Shipped to customer:</strong> {{r.carrier or '—'}}
-                    {% if tracking_url(r.carrier, r.tracking_number) %}· <a href="{{ tracking_url(r.carrier, r.tracking_number) }}" target="_blank" rel="noopener">{{r.tracking_number}} ↗</a>{% elif r.tracking_number %}· {{r.tracking_number}}{% endif %}
+                    {% if tracking_url(r.carrier, r.tracking_number) %}· <a href="{{ tracking_url(r.carrier, r.tracking_number) }}" target="_blank" rel="noopener">{{r.tracking_number}} ↗</a>{% elif r.tracking_number %}· {{r.tracking_number}}{% endif %}{% if r.tracking_number %}<span data-copy="{{r.tracking_number}}"></span>{% endif %}
                     {% if r.shipped_at %}<span class="muted">· {{r.shipped_at|day}}</span>{% endif %}</div>
                 {% endif %}
                 {% if can('repair_equipment_edit') %}<div class="hint"><a href="#{{ 'shipping-details' if (r.carrier or r.tracking_number) else 'partner-shipping' }}">Edit tracking ↓</a> (in Ticket details, then Save details)</div>{% endif %}
