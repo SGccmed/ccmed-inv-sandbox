@@ -69,6 +69,27 @@
   .ccm-brand .ccm-short {
     display: none
   }
+  /* v1.21: the company logo sits on a light badge so its dark lettering reads on the navy sidebar (rgba, so the
+     Dark/OLED colour swap in theme.py leaves the badge light). */
+  aside.ccm-side .ccm-logo {
+    background: rgba(255, 255, 255, .96);
+    border-radius: 8px;
+    padding: 6px 9px;
+    line-height: 0
+  }
+  aside.ccm-side .ccm-full.ccm-logo {
+    display: inline-block;
+    margin-bottom: 6px
+  }
+  aside.ccm-side .ccm-full img {
+    width: 140px;
+    height: auto
+  }
+  aside.ccm-side .ccm-short img {
+    height: 24px;
+    width: auto;
+    vertical-align: middle
+  }
   .ccm-collapse {
     background: none;
     border: 0;
@@ -420,7 +441,7 @@
   {% set sb_ship_here = sb_path.startswith('/shipping') %}
   {% set sb_adm_here = sb_path.startswith('/users') or sb_path.startswith('/products/admin') %}
   <div class="ccm-top">
-    <a href="/" class="ccm-brand"><span class="ccm-full">CC Medical</span><span class="ccm-short">CC</span><small>Inventory Workspace</small></a>
+    <a href="/" class="ccm-brand" title="CC Medical · Home"><span class="ccm-full ccm-logo"><img src="/assets/ccmed-logo.svg" alt="CC Medical"></span><span class="ccm-short ccm-logo"><img src="/assets/ccmed-mark.svg" alt="CC Medical"></span><small>Inventory Workspace</small></a>
     <button type="button" class="ccm-collapse" aria-label="Collapse or expand the menu" title="Collapse or expand the menu"
       onclick="ccmToggleSide()"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/><path d="M20 6l-6 6 6 6"/></svg></button>
   </div>

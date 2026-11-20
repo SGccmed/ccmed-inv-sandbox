@@ -71,7 +71,9 @@ STAGES = {
                  "look it over first (for example a partner repair)? Pick In Repair (send to a tech for inspection).",
     },
     'Shipped': {
-        'team': 'Admin', 'hold': False,
+        # v1.21: Admin owns it (invoice) but Shipping may close it too, so it shows as "Admin / Shipping" and is in
+        # both queues ('also').
+        'team': 'Admin', 'hold': False, 'turn': 'Admin / Shipping', 'also': ('Shipping',),
         'guide': "Shipping or Admin: close the ticket once it's out the door (pick the resolution). Admin: turn "
                  "the QuickBooks estimate into an invoice and enter the invoice number; it can still be added "
                  "after the ticket is closed. Warranty and declined tickets have no invoice.",
@@ -301,6 +303,12 @@ def user_teams(user=None):
     return teams
 
 
+def in_team(stage, team):
+    """Is this stage in that team's queue? (its owner, or a team listed in 'also', v1.21)"""
+    info = STAGES.get(stage, {})
+    return info.get('team') == team or team in info.get('also', ())
+
+
 def is_admin(user=None):
     return bool(roles_of(user or g.user) & ADMIN_ROLES)
 
@@ -335,6 +343,7 @@ def ticket_view(r, users=None):
     d = dict(r)
     info = STAGES.get(d['stage'], {'team': None, 'hold': False, 'guide': ''})
     d['team'] = info['team'] or '—'
+    d['turn'] = info.get('turn') or d['team']        # what "Whose turn" shows (v1.21: Shipped = Admin / Shipping)
     d['hold'] = info['hold']
     d['stage_days'] = days_since(d['stage_started_at']) if d['stage'] != 'Closed' else 0
     end = datetime.fromisoformat(d['completed_at']).date() if d['completed_at'] else datetime.now(timezone.utc).date()
@@ -450,7 +459,7 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
         else:
             where.append("r.stage<>'Closed'")
             if queue in TEAMS:
-                team_stages = [s for s, i in STAGES.items() if i['team'] == queue]
+                team_stages = [s for s, i in STAGES.items() if in_team(s, queue)]
                 where.append('r.stage IN (%s)' % ','.join('?' * len(team_stages))); args += team_stages
             elif queue == 'mine':
                 where.append('(r.assigned_to=? OR cl.account_owner=?)'); args += [me, me]
@@ -473,7 +482,7 @@ def register_repair_routes(app, conn, base_dir, inventory_code_maker):
         key = QUEUE_SORT.get(sort, QUEUE_SORT['in_stage'])
         rows.sort(key=key, reverse=request.args.get('dir', 'desc' if sort == 'in_stage' else 'asc') == 'desc')
         counts = {r['stage']: r['n'] for r in c.execute('SELECT stage, COUNT(*) n FROM customer_repairs GROUP BY stage')}
-        team_counts = {t: sum(counts.get(s, 0) for s, i in STAGES.items() if i['team'] == t) for t in TEAMS}
+        team_counts = {t: sum(counts.get(s, 0) for s in STAGES if in_team(s, t)) for t in TEAMS}
         mine = c.execute("""SELECT COUNT(*) FROM customer_repairs r LEFT JOIN clients cl ON cl.id=r.client_id
                             WHERE r.stage<>'Closed' AND (r.assigned_to=? OR cl.account_owner=?)""", (me, me)).fetchone()[0]
         reps, techs = sales_reps(c), tech_list(c)

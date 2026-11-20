@@ -77,7 +77,7 @@ def register_home_routes(app, conn, base_dir):
         tiles.append({'label': 'My open tickets', 'count': len(mine), 'hint': 'Assigned to you, or your customers',
                       'url': '/repairs?queue=mine', 'tone': ''})
         for team in sorted(R.user_teams()):
-            waiting = [t for t in open_rows if t['team'] == team]
+            waiting = [t for t in open_rows if R.in_team(t['stage'], team)]
             red = [t for t in waiting if t['age'] == 'red']
             tiles.append({'label': f'Waiting on {team}', 'count': len(waiting), 'hint': 'Open tickets in your stages',
                           'url': '/repairs?' + urlencode({'queue': team}), 'tone': ''})

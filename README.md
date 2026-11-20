@@ -8,7 +8,7 @@ Internal web app for tracking CC Medical's ultrasound equipment: stock, cores, c
 
 The **home page** (click **CC Medical** at the top left of any page) has a big search bar, quick links, counts of what's waiting on you, your **Favorites** (☆ Favorite at the top right of any page) and the records you opened recently.
 
-**The sidebar** is the same on every page, in the same order, with the current page highlighted. Each group has an icon:
+**The sidebar** (with the CC Medical logo at the top since v1.21) is the same on every page, in the same order, with the current page highlighted. Each group has an icon:
 
 - **Home** (house)
 - **Inventory** (box): **+ New Inventory** (receiving; Admins and Shipping), then Inventory, which opens Active stock, with a drop-down to switch to Sold or All. **Loaners**, **Rental**, **Pending** and **Needs Review** show how many items each holds; Pending turns yellow and Needs Review red when they have any.
@@ -44,6 +44,7 @@ Every page needs a staff login. Serial numbers are **not** unique keys: a matchi
 | `choices.py` | The pick lists: inventory locations and manufacturers (both locked). Edit the lists here to add or rename one |
 | `theme.py` | Light / Dark / OLED: the palettes and the colour swap applied to every page for the signed-in person's theme |
 | `shipping.py` | The Shipping queue page (a first version until the Shipping rework) |
+| `ccmed-logo.svg`, `ccmed-mark.svg` | The company logo (sidebar) and its "C" mark (collapsed sidebar, phones), served at `/assets/` |
 | `history.py` | The stock item's Product history (newest first) and Send to repair |
 | `costs.py` | Cost adjustments (Admins): corrects a cost or quoted price with a required reason, keeps the history |
 | `cores.py` | Core repairs: ticket updates, statuses, costs, converting to stock |
@@ -98,7 +99,7 @@ Each customer repair is a ticket with one owner at each stage, like an IT helpde
 | Waiting on Parts | Repair team (on hold) | In Repair |
 | Repair Complete | Sales | Ready to Ship |
 | Ready to Ship | Shipping | Shipped, or In Repair (send to a tech for inspection) |
-| Shipped | Shipping or Admin (Admin adds the invoice #) | Closed |
+| Shipped | Admin / Shipping (either can close it; Admin adds the invoice #) | Closed |
 | Closed | — | Admin can reopen |
 | At Partner | Sales (on hold) | Eval Complete, Returning from Partner, Shipped, or Ready to Ship |
 | Returning from Partner | Shipping | Ready to Ship, or In Repair (inspection) |

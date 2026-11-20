@@ -609,7 +609,7 @@
                 <a href="/repairs?stage={{s|urlencode}}" class="team-{{(stages[s].team or '')|replace(' ','-')}} {% if stage==s %}on{% endif %}">
                   <span>{{s}}</span>
                   <strong>{{counts.get(s,0)}}</strong>
-                  <small>{{stages[s].team}}{% if stages[s].hold %} · on hold{% endif %}</small>
+                  <small>{{stages[s].turn or stages[s].team}}{% if stages[s].hold %} · on hold{% endif %}</small>
                 </a>
               {% endfor %}
             </div>
@@ -694,7 +694,7 @@
                         <td>{{r.manufacturer or ''}} {{r.model or ''}}</td>
                         <td>{{r.serial or ''}}</td>
                         <td><span class="pill">{{r.stage}}</span>{% if r.warranty %} <span class="pill">Warranty</span>{% endif %}</td>
-                        <td>{{r.team}}</td>
+                        <td>{{r.turn}}</td>
                         <td>{{r.assigned_name or '—'}}</td>
                         <td>{{r.received_date|day}}</td>
                         <td>
@@ -810,7 +810,7 @@
                 <span>Stage</span>
                 <strong style="font-size:21px">{{r.stage}}</strong>
                 <div class="muted">
-                  {% if r.stage=='Closed' %}Resolution: {{r.resolution or '—'}}{% else %}Whose turn: {{r.team}}{% endif %}
+                  {% if r.stage=='Closed' %}Resolution: {{r.resolution or '—'}}{% else %}Whose turn: {{r.turn}}{% endif %}
                   {% if r.warranty %} · Warranty{% endif %}
                 </div>
               </div>
@@ -933,9 +933,9 @@
                       </select>
                       <div class="hint">
                         {% if r.stage == 'At Partner' and approved_before %}Approved already: pick Returning from Partner or Shipped once the partner sends it. Only use Eval Complete if the partner found more work to quote.
-                        {% elif moves %}Leave as is to keep the stage. It's {{r.team}}'s turn.
+                        {% elif moves %}Leave as is to keep the stage. It's {{r.turn}}'s turn.
                         {% elif r.stage=='Closed' %}This ticket is closed{% if all_moves %}; Admins can reopen it{% endif %}.
-                        {% else %}It's {{r.team}}'s turn; your role can't change the stage from {{r.stage}}{% if all_moves %} except as Admin{% endif %}.{% endif %}
+                        {% else %}It's {{r.turn}}'s turn; your role can't change the stage from {{r.stage}}{% if all_moves %} except as Admin{% endif %}.{% endif %}
                       </div>
                     </div>
                   </div>

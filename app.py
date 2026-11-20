@@ -419,7 +419,8 @@ shipping.register_shipping_routes(app,conn)
 @app.get('/assets/<name>')
 def asset(name):
  # The rich text editor (Trix, MIT licence) is served from this app so pages don't depend on another site.
- files={'trix.js':'application/javascript','trix.css':'text/css'}
+ # v1.21: the company logo (sidebar) and its "C" mark (collapsed sidebar, phones)
+ files={'trix.js':'application/javascript','trix.css':'text/css','ccmed-logo.svg':'image/svg+xml','ccmed-mark.svg':'image/svg+xml'}
  if name not in files:abort(404)
  return send_file(BASE/name,mimetype=files[name],max_age=86400)
 cores.register_core_routes(app,conn,BASE,new_inventory_code,norm)
